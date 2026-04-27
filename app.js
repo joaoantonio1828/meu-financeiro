@@ -31,6 +31,8 @@ let allCards = [];
 let allBudgets = [];
 let allGoals = [];
 let charts = {};
+let deferredInstallPrompt = null;
+let installTipShown = false;
 
 // ============================================================
 // INICIALIZAÇÃO
@@ -72,6 +74,7 @@ async function showApp() {
   document.getElementById('user-name').textContent = currentUser.email.split('@')[0];
   document.getElementById('user-email').textContent = currentUser.email;
   await loadAllData();
+  initPWAExperience();
   navigateTo('dashboard');
 }
 
@@ -186,6 +189,7 @@ function navigateTo(page) {
     case 'categories': renderCategories(); break;
     case 'budgets': renderBudgets(); break;
     case 'reports': renderReports(); break;
+    case 'settings': renderSettings(); break;
   }
 
   // Fechar sidebar mobile
@@ -553,33 +557,37 @@ async function saveTransaction(e) {
     // Criar novo (com parcelamento se for cartão)
     if (installments > 1 && payment_method === 'credit_card') {
       const groupId = crypto.randomUUID();
-const totalInstallments = Number.isFinite(installments) && installments > 1 ? installments : 1;
-const parcela = Math.round((amount / totalInstallments) * 100) / 100;
-const rows = [];
+      const totalInstallments = Number.isFinite(installments) && installments > 1 ? installments : 1;
+      const amountInCents = Math.round(amount * 100);
+      const baseParcelCents = Math.floor(amountInCents / totalInstallments);
+      const remainderCents = amountInCents - (baseParcelCents * totalInstallments);
+      const rows = [];
 
-for (let i = 0; i < totalInstallments; i++) {
-  const d = new Date(date + 'T00:00:00');
-  d.setMonth(d.getMonth() + i);
+      for (let i = 0; i < totalInstallments; i++) {
+        const d = new Date(date + 'T00:00:00');
+        d.setMonth(d.getMonth() + i);
 
-  const numeroParcela = i + 1;
+        const numeroParcela = i + 1;
+        const parcelCents = baseParcelCents + (i === totalInstallments - 1 ? remainderCents : 0);
+        const installmentLabel = `${String(numeroParcela).padStart(2, '0')}/${String(totalInstallments).padStart(2, '0')}`;
 
-  rows.push({
-    user_id: currentUser.id,
-    type,
-    category_id,
-    status: i === 0 ? status : 'pending',
-    payment_method,
-    credit_card_id,
-    notes,
-    description: `${description} (${String(numeroParcela).padStart(2, '0')}/${String(totalInstallments).padStart(2, '0')})`,
-    amount: parcela,
-    date: d.toISOString().split('T')[0],
-    is_installment: true,
-    installment_number: numeroParcela,
-    installment_total: totalInstallments,
-    installment_group_id: groupId
-  });
-}
+        rows.push({
+          user_id: currentUser.id,
+          type,
+          category_id,
+          status: i === 0 ? status : 'pending',
+          payment_method,
+          credit_card_id,
+          notes,
+          description: `${description} (${installmentLabel})`,
+          amount: parcelCents / 100,
+          date: d.toISOString().split('T')[0],
+          is_installment: true,
+          installment_number: numeroParcela,
+          installment_total: totalInstallments,
+          installment_group_id: groupId
+        });
+      }
       const { error } = await db.from('transactions').insert(rows);
       if (error) { showToast('Erro ao criar parcelas', 'error'); }
       else { showToast(`${installments} parcelas criadas!`, 'success'); }
@@ -1347,6 +1355,85 @@ async function doDelete(type, id) {
   await loadAllData();
   renderCurrentPage();
 }
+
+// ============================================================
+// APP STORE / PWA + LANÇAMENTO RÁPIDO
+// ============================================================
+function initPWAExperience() {
+  if (!installTipShown && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    installTipShown = true;
+    setTimeout(() => showToast('Dica: instale na Tela de Início para usar como app 📱', 'success'), 1400);
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  }
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('install-btn');
+  if (btn) {
+    btn.style.display = 'block';
+    btn.textContent = '📲 Instalar app';
+  }
+});
+
+async function installApp() {
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    showInstallGuide();
+    return;
+  }
+
+  if (!deferredInstallPrompt) {
+    showToast('Use o menu do navegador e escolha “Instalar app”. No iPhone, use Compartilhar → Adicionar à Tela de Início.', 'success');
+    return;
+  }
+
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+}
+
+function showInstallGuide() {
+  alert('Para instalar no iPhone:\n\n1. Abra este site no Safari\n2. Toque no botão de compartilhar\n3. Toque em “Adicionar à Tela de Início”\n4. Confirme em “Adicionar”\n\nPronto: ele abre como app, com ícone na tela inicial.');
+}
+
+function renderSettings() {
+  const btn = document.getElementById('install-btn');
+  if (!btn) return;
+  btn.style.display = 'block';
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    btn.textContent = '🍎 Ver instrução para iPhone';
+  }
+}
+
+function openQuickAdd() {
+  document.getElementById('tx-modal-title').textContent = 'Lançamento rápido';
+  document.getElementById('tx-id').value = '';
+  document.getElementById('tx-type').value = 'expense';
+  document.getElementById('tx-description').value = '';
+  document.getElementById('tx-amount').value = '';
+  document.getElementById('tx-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('tx-status').value = 'paid';
+  document.getElementById('tx-payment').value = 'money';
+  document.getElementById('tx-notes').value = '';
+  document.getElementById('tx-installments').value = '1';
+  document.getElementById('tx-card-group').style.display = 'none';
+  document.getElementById('tx-installments-group').style.display = 'none';
+
+  populateCategorySelect('expense');
+  openModal('tx-modal');
+
+  setTimeout(() => {
+    const desc = document.getElementById('tx-description');
+    const amount = document.getElementById('tx-amount');
+    if (desc) desc.placeholder = 'Ex: Café, mercado, gasolina...';
+    if (amount) amount.focus();
+  }, 200);
+}
+
 // ============================================================
 // MODAL
 // ============================================================

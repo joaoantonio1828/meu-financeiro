@@ -6,6 +6,12 @@
   <title>Controle Financeiro Premium</title>
   <meta name="description" content="Controle seu financeiro com facilidade" />
   <meta name="theme-color" content="#6366f1" />
+  <!-- PWA / App instalável -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Financeiro" />
   <link rel="stylesheet" href="style.css" />
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -123,6 +129,9 @@
       <div class="nav-item" data-page="reports" onclick="navigateTo('reports')">
         <span class="nav-icon">📊</span> Relatórios
       </div>
+      <div class="nav-item" data-page="settings" onclick="navigateTo('settings')">
+        <span class="nav-icon">⚙️</span> Configurações
+      </div>
     </nav>
 
     <div class="sidebar-footer">
@@ -229,6 +238,7 @@
         <div class="section-card" style="margin-top:20px">
           <div class="section-title" style="margin-bottom:14px">Ações rápidas</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn-add btn-quick" onclick="openQuickAdd()">⚡ Lançamento rápido</button>
             <button class="btn-add btn-add-income" onclick="openNewTransaction('income')">📈 Nova receita</button>
             <button class="btn-add btn-add-expense" onclick="openNewTransaction('expense')">📉 Nova despesa</button>
             <button class="btn-add" onclick="navigateTo('cards');openNewCard()">💳 Nova compra no cartão</button>
@@ -401,13 +411,51 @@
           <div class="section-title" style="margin-bottom:16px">🏆 Ranking de maiores despesas</div>
           <div id="top-expenses"></div>
         </div>
+
+      <!-- ========================
+           PAGE: SETTINGS
+      ======================== -->
+      <div id="page-settings" class="page hidden">
+        <div class="section-header" style="margin-bottom:16px">
+          <div>
+            <div class="section-title">Configurações</div>
+            <div class="section-subtitle">Atalhos, instalação e experiência de app</div>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <div class="section-card app-store-card">
+            <div class="app-icon-preview">💰</div>
+            <div class="section-title">Instalar como app</div>
+            <p class="settings-text">Adicione na tela inicial para abrir em tela cheia, com ícone próprio e aparência de aplicativo.</p>
+            <button class="btn-primary install-action" id="install-btn" onclick="installApp()">📲 Instalar app</button>
+            <button class="btn-secondary" onclick="showInstallGuide()">🍎 Como instalar no iPhone</button>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">⚡ Lançamento rápido</div>
+            <p class="settings-text">Abra um cadastro enxuto de despesa com status pago, data de hoje e foco direto no valor.</p>
+            <button class="btn-add btn-quick" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">📱 Atalho no iPhone</div>
+            <p class="settings-text">Depois de instalar na tela inicial, deixe o app na primeira tela do iPhone. O botão ⚡ fica sempre disponível no canto inferior.</p>
+            <div class="install-steps">
+              <div>1. Abra pelo Safari</div>
+              <div>2. Toque em compartilhar</div>
+              <div>3. Toque em “Adicionar à Tela de Início”</div>
+            </div>
+          </div>
+        </div>
       </div>
+
 
     </div><!-- /content-area -->
   </div><!-- /main-content -->
 
   <!-- FAB mobile -->
-  <button class="fab" onclick="openNewTransaction('expense')">+</button>
+  <button class="fab" onclick="openQuickAdd()" aria-label="Lançamento rápido">⚡</button>
 
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav">

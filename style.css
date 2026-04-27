@@ -905,3 +905,93 @@ select.form-input { appearance: none; background-image: url("data:image/svg+xml,
   background: linear-gradient(135deg, var(--danger), #b91c1c);
   box-shadow: 0 2px 8px rgba(239,68,68,.3);
 }
+
+
+/* ============================================================
+   APP STORE / PWA POLISH
+   ============================================================ */
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-quick {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1) !important;
+  box-shadow: 0 10px 24px rgba(99,102,241,.28);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.settings-text {
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin: 10px 0 16px;
+}
+
+.app-store-card {
+  background:
+    radial-gradient(circle at top right, rgba(99,102,241,.22), transparent 32%),
+    var(--surface);
+}
+
+.app-icon-preview {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22px;
+  margin-bottom: 14px;
+  font-size: 34px;
+  background: linear-gradient(135deg, #0f172a, #4f46e5);
+  box-shadow: 0 16px 35px rgba(79,70,229,.35);
+}
+
+.install-action {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.install-steps {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.install-steps div {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.fab {
+  width: 62px;
+  height: 62px;
+  font-size: 26px;
+  background: linear-gradient(135deg, #8b5cf6, #4f46e5);
+  box-shadow: 0 14px 34px rgba(79,70,229,.45);
+}
+
+.fab::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 1px solid rgba(99,102,241,.35);
+}
+
+@media (max-width: 900px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+@media (display-mode: standalone) {
+  .topbar { padding-top: calc(14px + env(safe-area-inset-top)); }
+}
