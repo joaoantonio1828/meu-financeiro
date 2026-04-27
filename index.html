@@ -411,6 +411,7 @@
           <div class="section-title" style="margin-bottom:16px">🏆 Ranking de maiores despesas</div>
           <div id="top-expenses"></div>
         </div>
+      </div>
 
       <!-- ========================
            PAGE: SETTINGS
@@ -418,34 +419,74 @@
       <div id="page-settings" class="page hidden">
         <div class="section-header" style="margin-bottom:16px">
           <div>
-            <div class="section-title">Configurações</div>
-            <div class="section-subtitle">Atalhos, instalação e experiência de app</div>
+            <div class="section-title">⚙️ Configurações</div>
+            <div class="section-subtitle">Instalação, atalhos, backup e preferências</div>
+          </div>
+        </div>
+
+        <div class="settings-hero">
+          <div class="app-icon-preview">💰</div>
+          <div>
+            <div class="settings-hero-title">Controle Financeiro</div>
+            <div class="settings-hero-sub">Modo app, lançamento rápido e controle seguro dos seus dados.</div>
           </div>
         </div>
 
         <div class="settings-grid">
           <div class="section-card app-store-card">
-            <div class="app-icon-preview">💰</div>
+            <div class="settings-card-icon">📲</div>
             <div class="section-title">Instalar como app</div>
-            <p class="settings-text">Adicione na tela inicial para abrir em tela cheia, com ícone próprio e aparência de aplicativo.</p>
+            <p class="settings-text">Use na tela inicial do iPhone/Android, abrindo em tela cheia com ícone próprio.</p>
             <button class="btn-primary install-action" id="install-btn" onclick="installApp()">📲 Instalar app</button>
-            <button class="btn-secondary" onclick="showInstallGuide()">🍎 Como instalar no iPhone</button>
+            <button class="btn-secondary full-width" onclick="showInstallGuide()">🍎 Como instalar no iPhone</button>
           </div>
 
           <div class="section-card">
-            <div class="section-title">⚡ Lançamento rápido</div>
-            <p class="settings-text">Abra um cadastro enxuto de despesa com status pago, data de hoje e foco direto no valor.</p>
-            <button class="btn-add btn-quick" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
+            <div class="settings-card-icon">⚡</div>
+            <div class="section-title">Lançamento rápido</div>
+            <p class="settings-text">Abre uma despesa paga com data de hoje e foco direto no valor para lançar em segundos.</p>
+            <button class="btn-add btn-quick full-width" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
           </div>
 
           <div class="section-card">
-            <div class="section-title">📱 Atalho no iPhone</div>
-            <p class="settings-text">Depois de instalar na tela inicial, deixe o app na primeira tela do iPhone. O botão ⚡ fica sempre disponível no canto inferior.</p>
-            <div class="install-steps">
-              <div>1. Abra pelo Safari</div>
-              <div>2. Toque em compartilhar</div>
-              <div>3. Toque em “Adicionar à Tela de Início”</div>
-            </div>
+            <div class="settings-card-icon">🎨</div>
+            <div class="section-title">Aparência</div>
+            <p class="settings-text">Alterne entre modo claro e escuro. A escolha fica salva neste aparelho.</p>
+            <button class="btn-add full-width" onclick="toggleTheme()">🌙 Alternar tema</button>
+          </div>
+
+          <div class="section-card">
+            <div class="settings-card-icon">💾</div>
+            <div class="section-title">Backup</div>
+            <p class="settings-text">Exporte seus dados em JSON para guardar uma cópia de segurança.</p>
+            <button class="btn-add full-width" onclick="exportData()">⬇️ Baixar backup</button>
+            <button class="btn-secondary full-width" onclick="document.getElementById('import-file').click()">⬆️ Importar backup</button>
+            <input type="file" id="import-file" accept="application/json" style="display:none" onchange="importDataFile(event)">
+          </div>
+
+          <div class="section-card">
+            <div class="settings-card-icon">👤</div>
+            <div class="section-title">Minha conta</div>
+            <p class="settings-text">E-mail logado:</p>
+            <div class="account-pill" id="settings-email">email@email.com</div>
+            <button class="btn-secondary full-width" onclick="handleLogout()">Sair da conta</button>
+          </div>
+
+          <div class="section-card danger-zone">
+            <div class="settings-card-icon">🧨</div>
+            <div class="section-title">Zona de risco</div>
+            <p class="settings-text">Apague somente seus lançamentos financeiros. Categorias, cartões e metas ficam salvos.</p>
+            <button class="btn-danger full-width" onclick="clearTransactionsOnly()">🗑️ Apagar lançamentos</button>
+          </div>
+        </div>
+
+        <div class="section-card install-guide-card">
+          <div class="section-title">📱 Guia rápido no iPhone</div>
+          <div class="install-steps">
+            <div><strong>1.</strong> Abra o site no Safari.</div>
+            <div><strong>2.</strong> Toque no botão compartilhar.</div>
+            <div><strong>3.</strong> Toque em “Adicionar à Tela de Início”.</div>
+            <div><strong>4.</strong> Confirme em “Adicionar”.</div>
           </div>
         </div>
       </div>
@@ -474,6 +515,9 @@
       </div>
       <div class="bottom-nav-item" data-page="reports" onclick="navigateTo('reports')">
         <span class="bottom-nav-icon">📊</span><span>Relatórios</span>
+      </div>
+      <div class="bottom-nav-item" data-page="settings" onclick="navigateTo('settings')">
+        <span class="bottom-nav-icon">⚙️</span><span>Ajustes</span>
       </div>
     </div>
   </nav>

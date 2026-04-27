@@ -995,3 +995,17 @@ body {
 @media (display-mode: standalone) {
   .topbar { padding-top: calc(14px + env(safe-area-inset-top)); }
 }
+
+
+/* ============================================================
+   CONFIGURAÇÕES PREMIUM - AJUSTES FINAIS
+   ============================================================ */
+.settings-hero { display:flex; align-items:center; gap:16px; padding:18px; margin-bottom:20px; border-radius:24px; background:linear-gradient(135deg, rgba(99,102,241,.14), rgba(16,185,129,.08)); border:1px solid var(--border); }
+.settings-hero-title { font-size:22px; font-weight:800; color:var(--text); }
+.settings-hero-sub { margin-top:4px; font-size:14px; color:var(--text-2); }
+.settings-card-icon { width:42px; height:42px; display:flex; align-items:center; justify-content:center; border-radius:14px; margin-bottom:12px; background:var(--surface-2); border:1px solid var(--border); font-size:22px; }
+.full-width { width:100%; margin-top:8px; }
+.account-pill { padding:12px 14px; border-radius:14px; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-weight:700; word-break:break-all; margin-bottom:10px; }
+.danger-zone { border-color:rgba(239,68,68,.35) !important; }
+.install-guide-card { margin-top:20px; }
+@media (max-width:640px) { .settings-hero { align-items:flex-start; } .settings-hero-title { font-size:20px; } .bottom-nav-items { grid-template-columns:repeat(6,1fr); } .bottom-nav-item span:last-child { font-size:10px; } }

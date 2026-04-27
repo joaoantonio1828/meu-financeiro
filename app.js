@@ -181,6 +181,14 @@ function navigateTo(page) {
 
   document.querySelectorAll(`[data-page="${page}"]`).forEach(el => el.classList.add('active'));
 
+  const titleMap = {
+    dashboard: 'Dashboard', transactions: 'Lançamentos', bills: 'Contas a Pagar',
+    cards: 'Cartões', categories: 'Categorias', budgets: 'Metas e Orçamentos',
+    reports: 'Relatórios', settings: 'Configurações'
+  };
+  const titleEl = document.querySelector('.page-title');
+  if (titleEl) titleEl.textContent = titleMap[page] || 'Controle Financeiro';
+
   switch (page) {
     case 'dashboard': renderDashboard(); break;
     case 'transactions': renderTransactions(); break;
@@ -1402,11 +1410,66 @@ function showInstallGuide() {
 
 function renderSettings() {
   const btn = document.getElementById('install-btn');
-  if (!btn) return;
-  btn.style.display = 'block';
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-    btn.textContent = '🍎 Ver instrução para iPhone';
+  if (btn) {
+    btn.style.display = 'block';
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+      btn.textContent = '🍎 Ver instrução para iPhone';
+    } else {
+      btn.textContent = deferredInstallPrompt ? '📲 Instalar app' : '📲 Instalar / Ver dica';
+    }
   }
+  const emailEl = document.getElementById('settings-email');
+  if (emailEl && currentUser) emailEl.textContent = currentUser.email;
+}
+
+function exportData() {
+  const backup = {
+    app: 'Controle Financeiro', exported_at: new Date().toISOString(), user_email: currentUser?.email || '',
+    transactions: allTransactions, categories: allCategories, credit_cards: allCards, budgets: allBudgets, goals: allGoals
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'backup-financeiro-' + new Date().toISOString().split('T')[0] + '.json';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  showToast('Backup baixado!', 'success');
+}
+
+async function importDataFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    if (!backup.transactions && !backup.categories && !backup.credit_cards) { showToast('Arquivo de backup inválido', 'error'); return; }
+    if (!confirm('Importar backup? Isso vai adicionar os dados do arquivo à sua conta atual.')) return;
+    const sanitize = (items, fields) => (items || []).map(item => { const obj = { user_id: currentUser.id }; fields.forEach(f => { if (item[f] !== undefined) obj[f] = item[f]; }); return obj; });
+    const ops = [];
+    const cats = sanitize(backup.categories, ['name','type','icon','color','is_default']);
+    const cards = sanitize(backup.credit_cards || backup.cards, ['name','brand','credit_limit','closing_day','due_day','color']);
+    const txs = sanitize(backup.transactions, ['type','description','amount','date','category_id','status','payment_method','credit_card_id','notes','is_installment','installment_number','installment_total','installment_group_id']);
+    const budgets = sanitize(backup.budgets, ['category_id','amount','month','year']);
+    const goals = sanitize(backup.goals, ['name','target_amount','current_amount','month','year','color']);
+    if (cats.length) ops.push(db.from('categories').insert(cats));
+    if (cards.length) ops.push(db.from('credit_cards').insert(cards));
+    if (txs.length) ops.push(db.from('transactions').insert(txs));
+    if (budgets.length) ops.push(db.from('budgets').insert(budgets));
+    if (goals.length) ops.push(db.from('goals').insert(goals));
+    const results = await Promise.all(ops);
+    if (results.some(r => r.error)) showToast('Alguns dados não foram importados', 'error');
+    else showToast('Backup importado!', 'success');
+    await loadAllData(); renderCurrentPage();
+  } catch (err) { showToast('Erro ao ler backup', 'error'); }
+  finally { event.target.value = ''; }
+}
+
+async function clearTransactionsOnly() {
+  if (!confirm('Apagar TODOS os lançamentos da sua conta? Cartões, categorias e metas serão mantidos.')) return;
+  const { error } = await db.from('transactions').delete().eq('user_id', currentUser.id);
+  if (error) { showToast('Erro ao apagar lançamentos', 'error'); return; }
+  showToast('Lançamentos apagados!', 'success');
+  await loadTransactions(); renderCurrentPage();
 }
 
 function openQuickAdd() {
