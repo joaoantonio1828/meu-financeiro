@@ -1296,9 +1296,38 @@ function confirmDelete(type, id) {
 
 async function doDelete(type, id) {
   closeModal('confirm-modal');
+
   let error;
+
   if (type === 'transaction') {
-    ({ error } = await db.from('transactions').delete().eq('id', id));
+    const tx = allTransactions.find(t => t.id === id);
+
+    if (tx?.is_installment && tx?.installment_group_id) {
+      const apagarTodas = confirm(
+        'Essa compra é parcelada. Deseja apagar TODAS as parcelas dessa compra?'
+      );
+
+      if (apagarTodas) {
+        ({ error } = await db
+          .from('transactions')
+          .delete()
+          .eq('installment_group_id', tx.installment_group_id)
+          .eq('user_id', currentUser.id));
+      } else {
+        ({ error } = await db
+          .from('transactions')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', currentUser.id));
+      }
+    } else {
+      ({ error } = await db
+        .from('transactions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', currentUser.id));
+    }
+
   } else if (type === 'card') {
     ({ error } = await db.from('credit_cards').delete().eq('id', id));
   } else if (type === 'category') {
@@ -1309,24 +1338,15 @@ async function doDelete(type, id) {
     ({ error } = await db.from('goals').delete().eq('id', id));
   }
 
-  if (error) { showToast('Erro ao excluir', 'error'); return; }
+  if (error) {
+    showToast('Erro ao excluir', 'error');
+    return;
+  }
+
   showToast('Excluído com sucesso!', 'success');
   await loadAllData();
   renderCurrentPage();
 }
-
-function renderCurrentPage() {
-  switch (currentPage) {
-    case 'dashboard': renderDashboard(); break;
-    case 'transactions': renderTransactions(); break;
-    case 'bills': renderBills(); break;
-    case 'cards': renderCards(); break;
-    case 'categories': renderCategories(); break;
-    case 'budgets': renderBudgets(); break;
-    case 'reports': renderReports(); break;
-  }
-}
-
 // ============================================================
 // MODAL
 // ============================================================
