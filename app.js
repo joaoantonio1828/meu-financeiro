@@ -553,21 +553,33 @@ async function saveTransaction(e) {
     // Criar novo (com parcelamento se for cartão)
     if (installments > 1 && payment_method === 'credit_card') {
       const groupId = crypto.randomUUID();
-      const parcela = amount / installments;
-      const rows = [];
-      for (let i = 0; i < installments; i++) {
-        const d = new Date(date + 'T00:00:00');
-        d.setMonth(d.getMonth() + i);
-        rows.push({
-          user_id: currentUser.id, type, category_id, status: i === 0 ? status : 'pending',
-          payment_method, credit_card_id, notes,
-          description: `${description} (${i + 1}/${installments})`,
-          amount: parseFloat(parcela.toFixed(2)),
-          date: d.toISOString().split('T')[0],
-          is_installment: true, installment_number: i + 1,
-          installment_total: installments, installment_group_id: groupId
-        });
-      }
+const totalInstallments = Number.isFinite(installments) && installments > 1 ? installments : 1;
+const parcela = Math.round((amount / totalInstallments) * 100) / 100;
+const rows = [];
+
+for (let i = 0; i < totalInstallments; i++) {
+  const d = new Date(date + 'T00:00:00');
+  d.setMonth(d.getMonth() + i);
+
+  const numeroParcela = i + 1;
+
+  rows.push({
+    user_id: currentUser.id,
+    type,
+    category_id,
+    status: i === 0 ? status : 'pending',
+    payment_method,
+    credit_card_id,
+    notes,
+    description: `${description} (${String(numeroParcela).padStart(2, '0')}/${String(totalInstallments).padStart(2, '0')})`,
+    amount: parcela,
+    date: d.toISOString().split('T')[0],
+    is_installment: true,
+    installment_number: numeroParcela,
+    installment_total: totalInstallments,
+    installment_group_id: groupId
+  });
+}
       const { error } = await db.from('transactions').insert(rows);
       if (error) { showToast('Erro ao criar parcelas', 'error'); }
       else { showToast(`${installments} parcelas criadas!`, 'success'); }
