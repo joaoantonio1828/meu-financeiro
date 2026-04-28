@@ -112,6 +112,10 @@
       <div class="nav-item" data-page="transactions" onclick="navigateTo('transactions')">
         <span class="nav-icon">💸</span> Lançamentos
       </div>
+      <div class="nav-item" data-page="pending" onclick="navigateTo('pending')">
+        <span class="nav-icon">🧾</span> Pendências
+        <span class="nav-badge" id="pending-nav-count">0</span>
+      </div>
       <div class="nav-item" data-page="bills" onclick="navigateTo('bills')">
         <span class="nav-icon">📅</span> Contas a Pagar
       </div>
@@ -241,10 +245,13 @@
             <button class="btn-add btn-quick" onclick="openQuickAdd()">⚡ Lançamento rápido</button>
             <button class="btn-add btn-add-income" onclick="openNewTransaction('income')">📈 Nova receita</button>
             <button class="btn-add btn-add-expense" onclick="openNewTransaction('expense')">📉 Nova despesa</button>
+            <button class="btn-add pending-action" onclick="navigateTo('pending')">🧾 Revisar pendências <span id="pending-action-count">0</span></button>
             <button class="btn-add" onclick="navigateTo('cards');openNewCard()">💳 Nova compra no cartão</button>
             <button class="btn-add" style="background:linear-gradient(135deg,var(--warning),#d97706)" onclick="navigateTo('bills')">📅 Ver contas a pagar</button>
           </div>
         </div>
+
+        <div id="premium-insights" style="margin-top:20px"></div>
       </div>
 
       <!-- ========================
@@ -260,6 +267,7 @@
             <div style="display:flex;gap:8px">
               <button class="btn-add btn-add-income" onclick="openNewTransaction('income')">+ Receita</button>
               <button class="btn-add btn-add-expense" onclick="openNewTransaction('expense')">+ Despesa</button>
+              <button class="btn-add btn-quick" onclick="openSmartQuickAdd()">⚡ Inteligente</button>
             </div>
           </div>
 
@@ -284,6 +292,27 @@
 
           <div id="transactions-list"></div>
         </div>
+      </div>
+
+      <!-- ========================
+           PAGE: PENDING REVIEW
+      ======================== -->
+      <div id="page-pending" class="page hidden">
+        <div class="section-card pending-hero-card">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🧾 Pendências para revisar</div>
+              <div class="section-subtitle">Lançamentos rápidos feitos pelo atalho do iPhone ficam aqui até você completar.</div>
+            </div>
+            <button class="btn-add btn-quick" onclick="window.open('quick.html','_blank')">⚡ Abrir tela rápida</button>
+          </div>
+          <div class="pending-summary-grid">
+            <div class="pending-summary-item"><span>Total pendente</span><strong id="pending-total">R$ 0,00</strong></div>
+            <div class="pending-summary-item"><span>Quantidade</span><strong id="pending-count">0</strong></div>
+            <div class="pending-summary-item"><span>Dica</span><strong>Complete depois</strong></div>
+          </div>
+        </div>
+        <div id="pending-list"></div>
       </div>
 
       <!-- ========================
@@ -448,11 +477,27 @@
             <button class="btn-add btn-quick full-width" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
           </div>
 
+          <div class="section-card shortcut-card">
+            <div class="settings-card-icon">📱</div>
+            <div class="section-title">Atalho rápido do iPhone</div>
+            <p class="settings-text">Crie um ícone separado na tela inicial para abrir só a tela rápida. Ele salva como pendência para você revisar depois.</p>
+            <button class="btn-add btn-quick full-width" onclick="openQuickCapture()">⚡ Testar tela rápida</button>
+            <button class="btn-secondary full-width" onclick="showQuickShortcutGuide()">🍎 Como adicionar atalho</button>
+          </div>
+
           <div class="section-card">
             <div class="settings-card-icon">🎨</div>
             <div class="section-title">Aparência</div>
             <p class="settings-text">Alterne entre modo claro e escuro. A escolha fica salva neste aparelho.</p>
             <button class="btn-add full-width" onclick="toggleTheme()">🌙 Alternar tema</button>
+          </div>
+
+          <div class="section-card premium-notify-card">
+            <div class="settings-card-icon">🔔</div>
+            <div class="section-title">Notificações</div>
+            <p class="settings-text">Ative alertas neste aparelho para lembretes e testes. No iPhone, instale na Tela de Início primeiro.</p>
+            <div class="account-pill" id="notification-status">Verificando...</div>
+            <button class="btn-add full-width" onclick="enableBrowserNotifications()">🔔 Ativar notificações</button>
           </div>
 
           <div class="section-card">
@@ -513,8 +558,8 @@
       <div class="bottom-nav-item" data-page="cards" onclick="navigateTo('cards')">
         <span class="bottom-nav-icon">💳</span><span>Cartões</span>
       </div>
-      <div class="bottom-nav-item" data-page="reports" onclick="navigateTo('reports')">
-        <span class="bottom-nav-icon">📊</span><span>Relatórios</span>
+      <div class="bottom-nav-item" data-page="pending" onclick="navigateTo('pending')">
+        <span class="bottom-nav-icon">🧾</span><span>Pend.</span>
       </div>
       <div class="bottom-nav-item" data-page="settings" onclick="navigateTo('settings')">
         <span class="bottom-nav-icon">⚙️</span><span>Ajustes</span>
@@ -523,6 +568,23 @@
   </nav>
 
 </div><!-- /app-screen -->
+
+<!-- ============================================================
+     MODAL: LANÇAMENTO INTELIGENTE
+============================================================ -->
+<div class="modal-overlay" id="smart-quick-modal">
+  <div class="modal smart-modal">
+    <div class="modal-header"><div class="modal-title">⚡ Lançamento inteligente</div><button class="modal-close" onclick="closeModal('smart-quick-modal')">✕</button></div>
+    <form onsubmit="saveSmartQuickAdd(event)">
+      <p class="settings-text">Digite do jeito natural: <b>50 mercado</b>, <b>18 café</b>, <b>120 gasolina</b>.</p>
+      <div class="form-group"><label class="form-label">Lançamento rápido</label><input type="text" id="smart-quick-input" class="form-input smart-input" placeholder="Ex: 50 mercado" oninput="updateSmartPreview()" autocomplete="off" required /></div>
+      <div class="form-group"><label class="form-label">Pagamento</label><select id="smart-quick-payment" class="form-input"><option value="pix">💸 PIX</option><option value="credit_card">💳 Cartão</option><option value="money">💵 Dinheiro</option><option value="debit_card">💳 Débito</option></select></div>
+      <div class="smart-preview" id="smart-quick-preview">Exemplo: <b>50 mercado</b></div>
+      <label class="review-toggle"><input type="checkbox" id="smart-quick-review" checked /> Mandar para Pendências e completar depois</label>
+      <div class="modal-footer"><button type="button" class="btn-secondary" onclick="closeModal('smart-quick-modal')">Cancelar</button><button type="submit" class="btn-primary">Salvar</button></div>
+    </form>
+  </div>
+</div>
 
 <!-- ============================================================
      MODAL: TRANSAÇÃO

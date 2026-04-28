@@ -74,8 +74,10 @@ async function showApp() {
   document.getElementById('user-name').textContent = currentUser.email.split('@')[0];
   document.getElementById('user-email').textContent = currentUser.email;
   await loadAllData();
+  updatePendingBadges();
   initPWAExperience();
-  navigateTo('dashboard');
+  const initialPage = new URLSearchParams(window.location.search).get('pending') === '1' ? 'pending' : 'dashboard';
+  navigateTo(initialPage);
 }
 
 // ============================================================
@@ -184,7 +186,7 @@ function navigateTo(page) {
   const titleMap = {
     dashboard: 'Dashboard', transactions: 'Lançamentos', bills: 'Contas a Pagar',
     cards: 'Cartões', categories: 'Categorias', budgets: 'Metas e Orçamentos',
-    reports: 'Relatórios', settings: 'Configurações'
+    reports: 'Relatórios', pending: 'Pendências', settings: 'Configurações'
   };
   const titleEl = document.querySelector('.page-title');
   if (titleEl) titleEl.textContent = titleMap[page] || 'Controle Financeiro';
@@ -197,6 +199,7 @@ function navigateTo(page) {
     case 'categories': renderCategories(); break;
     case 'budgets': renderBudgets(); break;
     case 'reports': renderReports(); break;
+    case 'pending': renderPendingReviews(); break;
     case 'settings': renderSettings(); break;
   }
 
@@ -259,6 +262,185 @@ async function loadGoals() {
   if (!error) allGoals = data || [];
 }
 
+
+// ============================================================
+// V2 PREMIUM: FATURAS, ALERTAS E INTELIGÊNCIA
+// ============================================================
+function monthKeyFromDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getInvoiceMonthForPurchase(card, purchaseDateStr) {
+  const d = new Date(purchaseDateStr + 'T00:00:00');
+  const invoice = new Date(d);
+  const closingDay = parseInt(card?.closing_day || 31);
+  if (d.getDate() > closingDay) invoice.setMonth(invoice.getMonth() + 1);
+  return { month: invoice.getMonth() + 1, year: invoice.getFullYear(), key: `${invoice.getFullYear()}-${String(invoice.getMonth() + 1).padStart(2, '0')}` };
+}
+
+function getInvoiceDueDate(card, invoiceMonth, invoiceYear) {
+  const dueDay = Math.min(parseInt(card?.due_day || 10), 28);
+  return new Date(invoiceYear, invoiceMonth - 1, dueDay).toISOString().split('T')[0];
+}
+
+function getCardInvoice(card, offset = 0) {
+  const base = new Date(currentYear, currentMonth - 1 + offset, 1);
+  const month = base.getMonth() + 1;
+  const year = base.getFullYear();
+  const key = `${year}-${String(month).padStart(2, '0')}`;
+  const txs = allTransactions.filter(t => {
+    if (t.credit_card_id !== card.id || t.type !== 'expense') return false;
+    return getInvoiceMonthForPurchase(card, t.date).key === key;
+  });
+  const total = txs.reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+  const dueDate = getInvoiceDueDate(card, month, year);
+  return { key, month, year, total, dueDate, txs };
+}
+
+async function payCardInvoice(cardId, offset = 0) {
+  const card = allCards.find(c => c.id === cardId);
+  if (!card) return;
+  const invoice = getCardInvoice(card, offset);
+  if (!invoice.txs.length) { showToast('Nenhuma compra nessa fatura', 'error'); return; }
+  if (!confirm(`Marcar fatura de ${formatCurrency(invoice.total)} como paga?`)) return;
+  const ids = invoice.txs.map(t => t.id);
+  const { error } = await db.from('transactions').update({ status: 'paid' }).in('id', ids).eq('user_id', currentUser.id);
+  if (error) { showToast('Erro ao pagar fatura', 'error'); return; }
+  showToast('Fatura paga!', 'success');
+  await loadTransactions();
+  updatePendingBadges();
+  renderCurrentPage();
+}
+
+function getFinancialAlerts() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const alerts = [];
+  allTransactions.filter(t => t.type === 'expense' && t.status !== 'paid').forEach(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    const diff = Math.round((d - today) / 86400000);
+    if (diff < 0) alerts.push({ type: 'danger', icon: '🚨', title: 'Conta vencida', text: `${t.description} venceu há ${Math.abs(diff)} dia(s): ${formatCurrency(t.amount)}` });
+    else if (diff <= 2) alerts.push({ type: 'warning', icon: '⏰', title: 'Conta perto de vencer', text: `${t.description} vence ${diff === 0 ? 'hoje' : 'em ' + diff + ' dia(s)'}: ${formatCurrency(t.amount)}` });
+  });
+  allBudgets.filter(b => b.month === currentMonth && b.year === currentYear).forEach(b => {
+    const key = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    const spent = allTransactions.filter(t => t.category_id === b.category_id && t.type === 'expense' && t.status === 'paid' && monthKeyFromDate(t.date) === key).reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const pct = b.amount > 0 ? (spent / b.amount) * 100 : 0;
+    const cat = allCategories.find(c => c.id === b.category_id);
+    if (pct >= 100) alerts.push({ type: 'danger', icon: '🔥', title: 'Orçamento estourado', text: `${cat?.name || 'Categoria'} passou do limite: ${formatCurrency(spent)} / ${formatCurrency(b.amount)}` });
+    else if (pct >= 80) alerts.push({ type: 'warning', icon: '⚠️', title: 'Orçamento quase no limite', text: `${cat?.name || 'Categoria'} já usou ${pct.toFixed(0)}% do orçamento.` });
+  });
+  return alerts.slice(0, 6);
+}
+
+function getSmartInsights(monthTxs) {
+  const paidExpenses = monthTxs.filter(t => t.type === 'expense' && t.status === 'paid');
+  const paidIncome = monthTxs.filter(t => t.type === 'income' && t.status === 'paid');
+  const income = paidIncome.reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const expenses = paidExpenses.reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const today = new Date();
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+  const elapsed = currentYear === today.getFullYear() && currentMonth === today.getMonth()+1 ? Math.max(1, today.getDate()) : daysInMonth;
+  const projectedExpenses = expenses > 0 ? expenses / elapsed * daysInMonth : 0;
+  const projectedBalance = income - projectedExpenses;
+  const previousDate = new Date(currentYear, currentMonth - 2, 1);
+  const prevKey = `${previousDate.getFullYear()}-${String(previousDate.getMonth()+1).padStart(2,'0')}`;
+  const prevExpenses = allTransactions.filter(t => t.type === 'expense' && t.status === 'paid' && monthKeyFromDate(t.date) === prevKey).reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const diffPct = prevExpenses > 0 ? ((expenses - prevExpenses) / prevExpenses) * 100 : 0;
+  return { income, expenses, projectedExpenses, projectedBalance, prevExpenses, diffPct };
+}
+
+function renderPremiumInsights(monthTxs) {
+  const wrap = document.getElementById('premium-insights');
+  if (!wrap) return;
+  const data = getSmartInsights(monthTxs);
+  const alerts = getFinancialAlerts();
+  wrap.innerHTML = `
+    <div class="premium-panel">
+      <div class="premium-panel-head">
+        <div><div class="section-title">🧠 Inteligência financeira</div><div class="section-subtitle">Previsão, comparação e alertas do mês</div></div>
+        <button class="btn-add btn-quick" onclick="openSmartQuickAdd()">⚡ Lançar inteligente</button>
+      </div>
+      <div class="insight-grid">
+        <div class="insight-card"><span>Saldo previsto</span><strong class="${data.projectedBalance >= 0 ? 'positive' : 'negative'}">${formatCurrency(data.projectedBalance)}</strong><small>estimativa para o fim do mês</small></div>
+        <div class="insight-card"><span>Gasto previsto</span><strong>${formatCurrency(data.projectedExpenses)}</strong><small>se continuar nesse ritmo</small></div>
+        <div class="insight-card"><span>Vs. mês passado</span><strong class="${data.diffPct <= 0 ? 'positive' : 'negative'}">${data.prevExpenses ? (data.diffPct > 0 ? '+' : '') + data.diffPct.toFixed(0) + '%' : '—'}</strong><small>${data.prevExpenses ? 'comparado ao mês anterior' : 'sem base anterior'}</small></div>
+      </div>
+      <div class="alerts-list">${alerts.length ? alerts.map(a => `<div class="alert-chip ${a.type}"><b>${a.icon} ${a.title}</b><span>${a.text}</span></div>`).join('') : `<div class="alert-chip success"><b>✅ Tudo tranquilo</b><span>Nenhum alerta crítico agora.</span></div>`} </div>
+    </div>`;
+}
+
+function parseSmartText(raw) {
+  const text = (raw || '').trim();
+  const amountMatch = text.match(/(\d+(?:[\.,]\d{1,2})?)/);
+  const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '.')) : 0;
+  const clean = text.replace(amountMatch?.[0] || '', '').trim();
+  const description = clean || 'Lançamento rápido';
+  const normalized = description.toLowerCase();
+  let category = allCategories.find(c => normalized.includes(c.name.toLowerCase()));
+  if (!category) {
+    const rules = [['mercado','Mercado'],['supermercado','Mercado'],['almoço','Alimentação'],['almoco','Alimentação'],['lanche','Alimentação'],['café','Alimentação'],['cafe','Alimentação'],['gasolina','Combustível'],['combustivel','Combustível'],['uber','Transporte'],['99','Transporte'],['academia','Academia'],['internet','Internet'],['energia','Energia'],['água','Água'],['agua','Água']];
+    const hit = rules.find(([k]) => normalized.includes(k));
+    if (hit) category = allCategories.find(c => c.name.toLowerCase() === hit[1].toLowerCase());
+  }
+  return { amount, description, category_id: category?.id || null };
+}
+
+function openSmartQuickAdd() {
+  const input = document.getElementById('smart-quick-input');
+  const preview = document.getElementById('smart-quick-preview');
+  if (input) input.value = '';
+  if (preview) preview.innerHTML = 'Exemplo: <b>50 mercado</b> ou <b>18 café</b>';
+  openModal('smart-quick-modal');
+  setTimeout(() => input?.focus(), 150);
+}
+
+function updateSmartPreview() {
+  const input = document.getElementById('smart-quick-input');
+  const preview = document.getElementById('smart-quick-preview');
+  if (!input || !preview) return;
+  const data = parseSmartText(input.value);
+  const cat = allCategories.find(c => c.id === data.category_id);
+  preview.innerHTML = data.amount > 0 ? `Vai salvar: <b>${formatCurrency(data.amount)}</b> · ${data.description} · ${cat ? cat.icon + ' ' + cat.name : 'Sem categoria'}` : 'Digite algo tipo: <b>50 mercado</b>';
+}
+
+async function saveSmartQuickAdd(e) {
+  e.preventDefault();
+  const input = document.getElementById('smart-quick-input');
+  const paymentEl = document.getElementById('smart-quick-payment');
+  const reviewEl = document.getElementById('smart-quick-review');
+  const data = parseSmartText(input.value);
+  if (!data.amount) { showToast('Digite o valor. Ex: 50 mercado', 'error'); return; }
+  const payment_method = paymentEl?.value || 'pix';
+  const needsReview = reviewEl?.checked !== false;
+  const notes = needsReview ? makeReviewNotes('Lançamento rápido dentro do app') : 'Lançamento inteligente';
+  const { error } = await db.from('transactions').insert({
+    user_id: currentUser.id,
+    type: 'expense',
+    description: data.description,
+    amount: data.amount,
+    date: new Date().toISOString().split('T')[0],
+    category_id: needsReview ? null : data.category_id,
+    status: needsReview ? 'pending' : 'paid',
+    payment_method,
+    notes
+  });
+  if (error) { showToast('Erro ao salvar lançamento rápido', 'error'); return; }
+  closeModal('smart-quick-modal');
+  showToast(needsReview ? 'Salvo em Pendências!' : 'Lançamento inteligente salvo!', 'success');
+  if (navigator.vibrate) navigator.vibrate(25);
+  await loadTransactions();
+  updatePendingBadges();
+  renderCurrentPage();
+}
+
+async function enableBrowserNotifications() {
+  if (!('Notification' in window)) { showToast('Este navegador não suporta notificações', 'error'); return; }
+  const permission = await Notification.requestPermission();
+  if (permission === 'granted') { new Notification('Controle Financeiro', { body: 'Notificações ativadas neste aparelho ✅', icon: '/icon-192.png' }); showToast('Notificações ativadas!', 'success'); }
+  else showToast('Notificação não permitida', 'error');
+}
+
 // ============================================================
 // DASHBOARD
 // ============================================================
@@ -308,6 +490,8 @@ function renderDashboard() {
   }
 
   renderDashboardChart(monthTxs);
+  renderPremiumInsights(monthTxs);
+  updatePendingBadges();
 }
 
 function renderDashboardChart(txs) {
@@ -363,6 +547,7 @@ function changeMonth(dir) {
   if (currentPage === 'bills') renderBills();
   if (currentPage === 'budgets') renderBudgets();
   if (currentPage === 'reports') renderReports();
+  if (currentPage === 'pending') renderPendingReviews();
 }
 
 function updateMonthLabel() {
@@ -488,7 +673,7 @@ async function openEditTransaction(id) {
   document.getElementById('tx-date').value = t.date;
   document.getElementById('tx-status').value = t.status;
   document.getElementById('tx-payment').value = t.payment_method;
-  document.getElementById('tx-notes').value = t.notes || '';
+  document.getElementById('tx-notes').value = cleanReviewNotes(t.notes || '');
   document.getElementById('tx-installments').value = '1';
 
   populateCategorySelect(t.type, t.category_id);
@@ -560,7 +745,7 @@ async function saveTransaction(e) {
       payment_method, credit_card_id, notes
     }).eq('id', id);
     if (error) { showToast('Erro ao salvar', 'error'); }
-    else { showToast('Lançamento atualizado!', 'success'); }
+    else { showToast('Lançamento atualizado!', 'success'); if (navigator.vibrate) navigator.vibrate(20); }
   } else {
     // Criar novo (com parcelamento se for cartão)
     if (installments > 1 && payment_method === 'credit_card') {
@@ -701,51 +886,25 @@ async function markAsPaid(id) {
 // ============================================================
 function renderCards() {
   const listEl = document.getElementById('cards-list');
-  if (allCards.length === 0) {
-    listEl.innerHTML = emptyState('Nenhum cartão cadastrado', '💳');
-    return;
-  }
-
+  if (allCards.length === 0) { listEl.innerHTML = emptyState('Nenhum cartão cadastrado', '💳'); return; }
   listEl.innerHTML = allCards.map(card => {
-    const today = new Date();
-    const currentPeriodStart = getCardPeriodStart(card, today);
-    const currentPeriodEnd = getCardPeriodEnd(card, today);
-
-    const purchases = allTransactions.filter(t =>
-      t.credit_card_id === card.id &&
-      t.type === 'expense' &&
-      t.date >= currentPeriodStart &&
-      t.date <= currentPeriodEnd
-    );
-    const used = purchases.reduce((s, t) => s + parseFloat(t.amount), 0);
-    const available = parseFloat(card.credit_limit) - used;
-    const pct = card.credit_limit > 0 ? Math.min(100, (used / card.credit_limit) * 100).toFixed(0) : 0;
+    const currentInvoice = getCardInvoice(card, 0);
+    const nextInvoice = getCardInvoice(card, 1);
+    const usedLimit = allTransactions.filter(t => t.credit_card_id === card.id && t.type === 'expense' && t.status !== 'paid').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+    const available = parseFloat(card.credit_limit || 0) - usedLimit;
+    const pct = card.credit_limit > 0 ? Math.min(100, (usedLimit / card.credit_limit) * 100).toFixed(0) : 0;
     const barColor = pct > 80 ? 'var(--danger)' : pct > 50 ? 'var(--warning)' : 'var(--success)';
-
     return `
-      <div class="card-item" style="background: linear-gradient(135deg, ${card.color}, ${card.color}99)">
-        <div class="card-header-row">
-          <div class="card-name">${card.name}</div>
-          <div class="card-brand">${brandIcon(card.brand)}</div>
+      <div class="card-item premium-credit-card" style="background: linear-gradient(135deg, ${card.color}, ${card.color}aa)">
+        <div class="card-glow"></div>
+        <div class="card-header-row"><div class="card-name">${card.name}</div><div class="card-brand">${brandIcon(card.brand)}</div></div>
+        <div class="card-limit-row"><span>Limite: ${formatCurrency(card.credit_limit)}</span><span>Disponível: ${formatCurrency(available)}</span></div>
+        <div class="card-progress-bar"><div class="card-progress-fill" style="width:${pct}%;background:${barColor}"></div></div>
+        <div class="invoice-grid">
+          <div class="invoice-box"><small>Fatura atual · vence ${formatDateBR(currentInvoice.dueDate)}</small><strong>${formatCurrency(currentInvoice.total)}</strong><button class="mini-pay-btn" onclick="payCardInvoice('${card.id}',0)">Pagar fatura</button></div>
+          <div class="invoice-box muted"><small>Próxima fatura</small><strong>${formatCurrency(nextInvoice.total)}</strong><span>${nextInvoice.txs.length} compra(s)</span></div>
         </div>
-        <div class="card-limit-row">
-          <span>Limite: ${formatCurrency(card.credit_limit)}</span>
-          <span>Disponível: ${formatCurrency(available)}</span>
-        </div>
-        <div class="card-progress-bar">
-          <div class="card-progress-fill" style="width:${pct}%;background:${barColor}"></div>
-        </div>
-        <div class="card-info-row">
-          <span>Fatura: ${formatCurrency(used)}</span>
-          <span>${pct}% usado</span>
-        </div>
-        <div class="card-actions-row">
-          <span class="card-dates">Fecha dia ${card.closing_day} · Vence dia ${card.due_day}</span>
-          <div>
-            <button class="btn-icon" onclick="openEditCard('${card.id}')">✏️</button>
-            <button class="btn-icon" onclick="confirmDelete('card','${card.id}')">🗑️</button>
-          </div>
-        </div>
+        <div class="card-actions-row"><span class="card-dates">Fecha dia ${card.closing_day} · Vence dia ${card.due_day}</span><div><button class="btn-icon" onclick="openEditCard('${card.id}')">✏️</button><button class="btn-icon" onclick="confirmDelete('card','${card.id}')">🗑️</button></div></div>
       </div>
     `;
   }).join('');
@@ -1153,6 +1312,112 @@ async function saveGoal(e) {
   }
 }
 
+
+// ============================================================
+// PENDÊNCIAS DE LANÇAMENTO RÁPIDO
+// ============================================================
+const REVIEW_MARKER = '[PENDENCIA_REVISAO]';
+
+function makeReviewNotes(extra = '') {
+  return `${REVIEW_MARKER} ${extra}`.trim();
+}
+
+function isReviewPending(t) {
+  return (t.notes || '').includes(REVIEW_MARKER);
+}
+
+function cleanReviewNotes(notes = '') {
+  return notes.replace(REVIEW_MARKER, '').replace('Lançamento rápido dentro do app', '').replace('Atalho rápido iPhone', '').trim();
+}
+
+function getPendingReviews() {
+  return allTransactions
+    .filter(isReviewPending)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function updatePendingBadges() {
+  const count = getPendingReviews().length;
+  const nav = document.getElementById('pending-nav-count');
+  const action = document.getElementById('pending-action-count');
+  if (nav) { nav.textContent = count; nav.style.display = count ? 'inline-flex' : 'none'; }
+  if (action) action.textContent = count ? `(${count})` : '';
+}
+
+function renderPendingReviews() {
+  updatePendingBadges();
+  const pending = getPendingReviews();
+  const total = pending.reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+  const totalEl = document.getElementById('pending-total');
+  const countEl = document.getElementById('pending-count');
+  const listEl = document.getElementById('pending-list');
+  if (totalEl) totalEl.textContent = formatCurrency(total);
+  if (countEl) countEl.textContent = pending.length;
+  if (!listEl) return;
+
+  if (!pending.length) {
+    listEl.innerHTML = `
+      <div class="section-card empty-pending-card">
+        <div class="empty-icon">✅</div>
+        <div class="section-title">Nenhuma pendência</div>
+        <p class="settings-text">Tudo revisado. Quando você usar a tela rápida do iPhone, os lançamentos vão aparecer aqui.</p>
+        <button class="btn-add btn-quick" onclick="openQuickCapture()">⚡ Testar lançamento rápido</button>
+      </div>`;
+    return;
+  }
+
+  listEl.innerHTML = pending.map(t => {
+    const icon = paymentLabel(t.payment_method).includes('Cartão') ? '💳' : t.payment_method === 'pix' ? '💸' : '💵';
+    return `
+      <div class="section-card pending-review-row">
+        <div class="pending-review-main">
+          <div class="pending-review-icon">${icon}</div>
+          <div>
+            <div class="tx-description">${t.description}</div>
+            <div class="tx-meta">${formatDateBR(t.date)} · ${paymentLabel(t.payment_method)} · aguardando categoria/status</div>
+          </div>
+        </div>
+        <div class="pending-review-actions">
+          <strong class="negative">- ${formatCurrency(t.amount)}</strong>
+          <button class="btn-primary" onclick="openReviewTransaction('${t.id}')">Completar</button>
+          <button class="btn-secondary" onclick="markReviewDone('${t.id}')">OK rápido</button>
+          <button class="btn-icon" onclick="confirmDelete('transaction','${t.id}')">🗑️</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openReviewTransaction(id) {
+  openEditTransaction(id);
+  setTimeout(() => {
+    const title = document.getElementById('tx-modal-title');
+    if (title) title.textContent = 'Completar pendência';
+  }, 50);
+}
+
+async function markReviewDone(id) {
+  const tx = allTransactions.find(t => t.id === id);
+  if (!tx) return;
+  const { error } = await db.from('transactions').update({
+    notes: cleanReviewNotes(tx.notes || ''),
+    status: tx.status === 'pending' ? 'paid' : tx.status
+  }).eq('id', id).eq('user_id', currentUser.id);
+  if (error) { showToast('Erro ao concluir pendência', 'error'); return; }
+  showToast('Pendência concluída!', 'success');
+  if (navigator.vibrate) navigator.vibrate(25);
+  await loadTransactions();
+  renderPendingReviews();
+}
+
+function openQuickCapture() {
+  window.open('quick.html', '_blank');
+}
+
+function showQuickShortcutGuide() {
+  const url = `${window.location.origin}/quick.html`;
+  alert(`Atalho rápido do iPhone:\n\n1. Abra esta tela no Safari:\n${url}\n\n2. Toque no botão compartilhar\n3. Toque em “Adicionar à Tela de Início”\n4. Dê o nome: Lançar Gasto\n\nDepois é só tocar nesse ícone, preencher valor + descrição + pagamento e confirmar. Ele aparece em Pendências no app principal.`);
+}
+
 // ============================================================
 // RELATÓRIOS
 // ============================================================
@@ -1418,8 +1683,11 @@ function renderSettings() {
       btn.textContent = deferredInstallPrompt ? '📲 Instalar app' : '📲 Instalar / Ver dica';
     }
   }
+  const notifyEl = document.getElementById('notification-status');
+  if (notifyEl) notifyEl.textContent = ('Notification' in window) ? (Notification.permission === 'granted' ? 'Ativadas neste aparelho' : 'Desativadas') : 'Não suportado';
   const emailEl = document.getElementById('settings-email');
   if (emailEl && currentUser) emailEl.textContent = currentUser.email;
+  updatePendingBadges();
 }
 
 function exportData() {
@@ -1473,28 +1741,7 @@ async function clearTransactionsOnly() {
 }
 
 function openQuickAdd() {
-  document.getElementById('tx-modal-title').textContent = 'Lançamento rápido';
-  document.getElementById('tx-id').value = '';
-  document.getElementById('tx-type').value = 'expense';
-  document.getElementById('tx-description').value = '';
-  document.getElementById('tx-amount').value = '';
-  document.getElementById('tx-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('tx-status').value = 'paid';
-  document.getElementById('tx-payment').value = 'money';
-  document.getElementById('tx-notes').value = '';
-  document.getElementById('tx-installments').value = '1';
-  document.getElementById('tx-card-group').style.display = 'none';
-  document.getElementById('tx-installments-group').style.display = 'none';
-
-  populateCategorySelect('expense');
-  openModal('tx-modal');
-
-  setTimeout(() => {
-    const desc = document.getElementById('tx-description');
-    const amount = document.getElementById('tx-amount');
-    if (desc) desc.placeholder = 'Ex: Café, mercado, gasolina...';
-    if (amount) amount.focus();
-  }, 200);
+  openSmartQuickAdd();
 }
 
 // ============================================================
@@ -1535,6 +1782,7 @@ function toggleTheme() {
   // Re-renderizar gráficos com nova cor
   if (currentPage === 'dashboard') renderDashboard();
   if (currentPage === 'reports') renderReports();
+  if (currentPage === 'pending') renderPendingReviews();
 }
 
 function updateThemeIcon(theme) {
