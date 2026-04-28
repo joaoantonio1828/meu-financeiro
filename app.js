@@ -33,6 +33,8 @@ let allGoals = [];
 let charts = {};
 let deferredInstallPrompt = null;
 let installTipShown = false;
+let cachedUserPrefs = {};
+
 
 // ============================================================
 // INICIALIZAÇÃO
@@ -73,6 +75,8 @@ async function showApp() {
   document.getElementById('app-screen').classList.remove('hidden');
   document.getElementById('user-name').textContent = currentUser.email.split('@')[0];
   document.getElementById('user-email').textContent = currentUser.email;
+  loadUserPreferences();
+  applyUserPreferences();
   await loadAllData();
   updatePendingBadges();
   initPWAExperience();
@@ -186,7 +190,7 @@ function navigateTo(page) {
   const titleMap = {
     dashboard: 'Dashboard', transactions: 'Lançamentos', bills: 'Contas a Pagar',
     cards: 'Cartões', categories: 'Categorias', budgets: 'Metas e Orçamentos',
-    reports: 'Relatórios', pending: 'Pendências', settings: 'Configurações'
+    reports: 'Relatórios', pending: 'Pendências', calendar: 'Calendário', settings: 'Configurações'
   };
   const titleEl = document.querySelector('.page-title');
   if (titleEl) titleEl.textContent = titleMap[page] || 'Controle Financeiro';
@@ -200,6 +204,7 @@ function navigateTo(page) {
     case 'budgets': renderBudgets(); break;
     case 'reports': renderReports(); break;
     case 'pending': renderPendingReviews(); break;
+    case 'calendar': renderCalendar(); break;
     case 'settings': renderSettings(); break;
   }
 
@@ -374,16 +379,36 @@ function parseSmartText(raw) {
   const text = (raw || '').trim();
   const amountMatch = text.match(/(\d+(?:[\.,]\d{1,2})?)/);
   const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '.')) : 0;
-  const clean = text.replace(amountMatch?.[0] || '', '').trim();
+  let clean = text.replace(amountMatch?.[0] || '', '').trim();
+  const normalizedFull = text.toLowerCase();
+
+  let payment_method = null;
+  const paymentRules = [
+    ['pix', 'pix'], ['cartao', 'credit_card'], ['cartão', 'credit_card'], ['credito', 'credit_card'], ['crédito', 'credit_card'],
+    ['debito', 'debit_card'], ['débito', 'debit_card'], ['dinheiro', 'money'], ['cash', 'money'], ['boleto', 'boleto']
+  ];
+  const payHit = paymentRules.find(([key]) => normalizedFull.includes(key));
+  if (payHit) {
+    payment_method = payHit[1];
+    clean = clean.replace(new RegExp(payHit[0], 'ig'), '').trim();
+  }
+
   const description = clean || 'Lançamento rápido';
   const normalized = description.toLowerCase();
   let category = allCategories.find(c => normalized.includes(c.name.toLowerCase()));
   if (!category) {
-    const rules = [['mercado','Mercado'],['supermercado','Mercado'],['almoço','Alimentação'],['almoco','Alimentação'],['lanche','Alimentação'],['café','Alimentação'],['cafe','Alimentação'],['gasolina','Combustível'],['combustivel','Combustível'],['uber','Transporte'],['99','Transporte'],['academia','Academia'],['internet','Internet'],['energia','Energia'],['água','Água'],['agua','Água']];
+    const rules = [
+      ['mercado','Mercado'],['supermercado','Mercado'],['compras','Mercado'],
+      ['almoço','Alimentação'],['almoco','Alimentação'],['janta','Alimentação'],['lanche','Alimentação'],['café','Alimentação'],['cafe','Alimentação'],['ifood','Alimentação'],
+      ['gasolina','Combustível'],['combustivel','Combustível'],['combustível','Combustível'],['posto','Combustível'],
+      ['uber','Transporte'],['99','Transporte'],['onibus','Transporte'],['ônibus','Transporte'],
+      ['academia','Academia'],['internet','Internet'],['energia','Energia'],['luz','Energia'],['água','Água'],['agua','Água'],
+      ['netflix','Assinaturas'],['spotify','Assinaturas'],['assinatura','Assinaturas'],['farmacia','Saúde'],['farmácia','Saúde'],['remedio','Saúde']
+    ];
     const hit = rules.find(([k]) => normalized.includes(k));
     if (hit) category = allCategories.find(c => c.name.toLowerCase() === hit[1].toLowerCase());
   }
-  return { amount, description, category_id: category?.id || null };
+  return { amount, description, category_id: category?.id || null, payment_method };
 }
 
 function openSmartQuickAdd() {
@@ -401,7 +426,7 @@ function updateSmartPreview() {
   if (!input || !preview) return;
   const data = parseSmartText(input.value);
   const cat = allCategories.find(c => c.id === data.category_id);
-  preview.innerHTML = data.amount > 0 ? `Vai salvar: <b>${formatCurrency(data.amount)}</b> · ${data.description} · ${cat ? cat.icon + ' ' + cat.name : 'Sem categoria'}` : 'Digite algo tipo: <b>50 mercado</b>';
+  preview.innerHTML = data.amount > 0 ? `Vai salvar: <b>${formatCurrency(data.amount)}</b> · ${data.description} · ${cat ? cat.icon + ' ' + cat.name : 'Sem categoria'}${data.payment_method ? ' · ' + paymentLabel(data.payment_method) : ''}` : 'Digite algo tipo: <b>50 mercado pix</b>';
 }
 
 async function saveSmartQuickAdd(e) {
@@ -547,6 +572,7 @@ function changeMonth(dir) {
   if (currentPage === 'bills') renderBills();
   if (currentPage === 'budgets') renderBudgets();
   if (currentPage === 'reports') renderReports();
+  if (currentPage === 'calendar') renderCalendar();
   if (currentPage === 'pending') renderPendingReviews();
 }
 
@@ -1687,6 +1713,8 @@ function renderSettings() {
   if (notifyEl) notifyEl.textContent = ('Notification' in window) ? (Notification.permission === 'granted' ? 'Ativadas neste aparelho' : 'Desativadas') : 'Não suportado';
   const emailEl = document.getElementById('settings-email');
   if (emailEl && currentUser) emailEl.textContent = currentUser.email;
+  syncSettingsProfileUI();
+  updatePrivacyUI();
   updatePendingBadges();
 }
 
@@ -1744,6 +1772,220 @@ function openQuickAdd() {
   openSmartQuickAdd();
 }
 
+
+// ============================================================
+// RENDERIZAÇÃO DA PÁGINA ATUAL
+// ============================================================
+function renderCurrentPage() {
+  switch (currentPage) {
+    case 'dashboard': renderDashboard(); break;
+    case 'transactions': renderTransactions(); break;
+    case 'bills': renderBills(); break;
+    case 'cards': renderCards(); break;
+    case 'categories': renderCategories(); break;
+    case 'budgets': renderBudgets(); break;
+    case 'reports': renderReports(); break;
+    case 'pending': renderPendingReviews(); break;
+    case 'calendar': renderCalendar(); break;
+    case 'settings': renderSettings(); break;
+  }
+}
+
+// ============================================================
+// V4 PREMIUM: PERFIL, PERSONALIZAÇÃO, PRIVACIDADE E CALENDÁRIO
+// ============================================================
+function prefsKey() {
+  return currentUser ? `finance_prefs_${currentUser.id}` : 'finance_prefs_guest';
+}
+
+function loadUserPreferences() {
+  try {
+    cachedUserPrefs = JSON.parse(localStorage.getItem(prefsKey()) || '{}');
+  } catch (_) {
+    cachedUserPrefs = {};
+  }
+  return cachedUserPrefs;
+}
+
+function saveUserPreferences(patch = {}) {
+  cachedUserPrefs = { ...(cachedUserPrefs || {}), ...patch };
+  localStorage.setItem(prefsKey(), JSON.stringify(cachedUserPrefs));
+  applyUserPreferences();
+}
+
+function applyUserPreferences() {
+  const prefs = cachedUserPrefs || loadUserPreferences();
+  const fallbackName = currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Usuário';
+  const name = prefs.displayName || fallbackName;
+  const avatar = prefs.avatarDataUrl || '';
+  const accent = prefs.accentColor || '#6366f1';
+
+  document.documentElement.style.setProperty('--primary', accent);
+  document.documentElement.style.setProperty('--primary-dark', shadeColor(accent, -18));
+  document.documentElement.style.setProperty('--primary-light', shadeColor(accent, 18));
+
+  const userName = document.getElementById('user-name');
+  if (userName) userName.textContent = name;
+  const avatarEl = document.getElementById('user-avatar');
+  if (avatarEl) renderAvatarElement(avatarEl, avatar, name);
+  const preview = document.getElementById('profile-avatar-preview');
+  if (preview) renderAvatarElement(preview, avatar, name);
+  const input = document.getElementById('profile-display-name');
+  if (input) input.value = prefs.displayName || '';
+
+  document.body.classList.toggle('privacy-mode', !!prefs.privacyMode);
+  document.body.classList.toggle('compact-mode', !!prefs.compactMode);
+  updatePrivacyUI();
+}
+
+function renderAvatarElement(el, avatar, name) {
+  if (!el) return;
+  if (avatar) {
+    el.innerHTML = `<img src="${avatar}" alt="Foto de perfil">`;
+  } else {
+    el.textContent = (name || 'U').trim().charAt(0).toUpperCase();
+  }
+}
+
+function syncSettingsProfileUI() {
+  loadUserPreferences();
+  applyUserPreferences();
+}
+
+function saveProfileName() {
+  const input = document.getElementById('profile-display-name');
+  const name = (input?.value || '').trim();
+  if (!name) { showToast('Digite um nome para salvar', 'error'); return; }
+  saveUserPreferences({ displayName: name });
+  showToast('Perfil atualizado!', 'success');
+}
+
+function handleProfilePhoto(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('Escolha uma imagem válida', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 320;
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      saveUserPreferences({ avatarDataUrl: canvas.toDataURL('image/jpeg', 0.82) });
+      showToast('Foto de perfil salva!', 'success');
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function removeProfilePhoto() {
+  saveUserPreferences({ avatarDataUrl: '' });
+  showToast('Foto removida', 'success');
+}
+
+function setAccentColor(color) {
+  saveUserPreferences({ accentColor: color });
+  showToast('Cor atualizada!', 'success');
+}
+
+function resetPersonalization() {
+  saveUserPreferences({ accentColor: '#6366f1', compactMode: false });
+  showToast('Personalização restaurada', 'success');
+}
+
+function toggleCompactMode() {
+  const prefs = cachedUserPrefs || loadUserPreferences();
+  saveUserPreferences({ compactMode: !prefs.compactMode });
+  showToast(!prefs.compactMode ? 'Modo compacto ativado' : 'Modo compacto desativado', 'success');
+}
+
+function togglePrivacyMode() {
+  const prefs = cachedUserPrefs || loadUserPreferences();
+  saveUserPreferences({ privacyMode: !prefs.privacyMode });
+  updatePrivacyUI();
+  showToast(!prefs.privacyMode ? 'Valores escondidos' : 'Valores visíveis', 'success');
+}
+
+function updatePrivacyUI() {
+  const prefs = cachedUserPrefs || loadUserPreferences();
+  const active = !!prefs.privacyMode;
+  const status = document.getElementById('privacy-status');
+  const btn = document.getElementById('privacy-toggle-btn');
+  if (status) status.textContent = active ? 'Valores escondidos' : 'Valores visíveis';
+  if (btn) btn.textContent = active ? '👁️ Mostrar valores' : '🙈 Esconder valores';
+}
+
+function shadeColor(hex, percent) {
+  const f = parseInt(hex.slice(1), 16);
+  const t = percent < 0 ? 0 : 255;
+  const p = Math.abs(percent) / 100;
+  const R = f >> 16, G = f >> 8 & 0x00FF, B = f & 0x0000FF;
+  return '#' + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + (Math.round((t - G) * p) + G) * 0x100 + (Math.round((t - B) * p) + B)).toString(16).slice(1);
+}
+
+function renderCalendar() {
+  updateMonthLabel();
+  const grid = document.getElementById('calendar-grid');
+  const summary = document.getElementById('calendar-summary');
+  if (!grid || !summary) return;
+
+  const first = new Date(currentYear, currentMonth - 1, 1);
+  const days = new Date(currentYear, currentMonth, 0).getDate();
+  const startOffset = first.getDay();
+  const monthKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+  const monthTxs = allTransactions.filter(t => monthKeyFromDate(t.date) === monthKey);
+  const income = monthTxs.filter(t => t.type === 'income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const expense = monthTxs.filter(t => t.type === 'expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const pending = monthTxs.filter(t => t.status !== 'paid').length;
+
+  summary.innerHTML = `
+    <div class="calendar-summary-card positive"><span>Receitas no mês</span><strong>${formatCurrency(income)}</strong></div>
+    <div class="calendar-summary-card negative"><span>Despesas no mês</span><strong>${formatCurrency(expense)}</strong></div>
+    <div class="calendar-summary-card"><span>Pendências</span><strong>${pending}</strong></div>
+  `;
+
+  const headers = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  let html = headers.map(h => `<div class="calendar-weekday">${h}</div>`).join('');
+  for (let i = 0; i < startOffset; i++) html += '<div class="calendar-day empty"></div>';
+
+  const todayKey = new Date().toISOString().split('T')[0];
+  for (let day = 1; day <= days; day++) {
+    const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const txs = monthTxs.filter(t => t.date === dateStr);
+    const dayIncome = txs.filter(t => t.type === 'income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const dayExpense = txs.filter(t => t.type === 'expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const hasReview = txs.some(isReviewPending);
+    const isToday = dateStr === todayKey;
+    html += `<button class="calendar-day ${isToday ? 'today' : ''} ${txs.length ? 'has-items' : ''}" onclick="openCalendarDay('${dateStr}')">
+      <span class="calendar-day-number">${day}</span>
+      ${dayIncome ? `<small class="positive">+${formatCompactCurrency(dayIncome)}</small>` : ''}
+      ${dayExpense ? `<small class="negative">-${formatCompactCurrency(dayExpense)}</small>` : ''}
+      ${hasReview ? `<em>revisar</em>` : ''}
+    </button>`;
+  }
+  grid.innerHTML = html;
+}
+
+function formatCompactCurrency(value) {
+  const n = Math.abs(parseFloat(value || 0));
+  if (n >= 1000) return 'R$' + (n / 1000).toFixed(1).replace('.', ',') + 'k';
+  return 'R$' + n.toFixed(0);
+}
+
+function openCalendarDay(dateStr) {
+  currentMonth = parseInt(dateStr.slice(5,7));
+  currentYear = parseInt(dateStr.slice(0,4));
+  navigateTo('transactions');
+  showToast(`Mostrando lançamentos de ${formatDateBR(dateStr)}. Use a busca se quiser filtrar mais.`, 'success');
+}
+
 // ============================================================
 // MODAL
 // ============================================================
@@ -1782,6 +2024,7 @@ function toggleTheme() {
   // Re-renderizar gráficos com nova cor
   if (currentPage === 'dashboard') renderDashboard();
   if (currentPage === 'reports') renderReports();
+  if (currentPage === 'calendar') renderCalendar();
   if (currentPage === 'pending') renderPendingReviews();
 }
 

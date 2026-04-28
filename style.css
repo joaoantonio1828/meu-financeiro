@@ -1038,3 +1038,51 @@ body{background:radial-gradient(circle at 10% -10%,rgba(99,102,241,.12),transpar
 .review-toggle input { width:18px; height:18px; accent-color:#6366f1; }
 @media(max-width:760px){ .pending-summary-grid{grid-template-columns:1fr} .pending-review-row{align-items:flex-start; flex-direction:column} .pending-review-actions{width:100%; justify-content:space-between} .pending-review-actions .btn-primary,.pending-review-actions .btn-secondary{flex:1} }
 @media(max-width:640px){ .bottom-nav-items{grid-template-columns:repeat(6,1fr)!important} }
+
+/* ============================================================
+   V4 - PERFIL, PERSONALIZAÇÃO, PRIVACIDADE E CALENDÁRIO
+   ============================================================ */
+.user-avatar img, .profile-avatar-preview img { width:100%; height:100%; object-fit:cover; border-radius:inherit; display:block; }
+.profile-card-premium { background:radial-gradient(circle at 100% 0%,rgba(99,102,241,.18),transparent 34%),var(--surface); }
+.profile-editor { display:grid; grid-template-columns:92px 1fr; gap:14px; align-items:start; margin-top:14px; }
+.profile-avatar-preview { width:92px; height:92px; border-radius:28px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:34px; color:#fff; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); box-shadow:0 18px 38px rgba(99,102,241,.26); overflow:hidden; }
+.profile-editor-actions { display:grid; gap:8px; }
+.personalization-card { background:radial-gradient(circle at 80% 10%,rgba(14,165,233,.16),transparent 36%),var(--surface); }
+.privacy-card { background:radial-gradient(circle at 90% 0%,rgba(15,23,42,.10),transparent 35%),var(--surface); }
+.calendar-card { background:radial-gradient(circle at 90% 0%,rgba(16,185,129,.15),transparent 36%),var(--surface); }
+.accent-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin:14px 0 8px; }
+.accent-dot { height:38px; border-radius:14px; background:var(--accent); box-shadow:0 10px 20px color-mix(in srgb, var(--accent) 35%, transparent); border:3px solid rgba(255,255,255,.75); outline:1px solid var(--border); transition:transform .18s ease; }
+.accent-dot:hover { transform:translateY(-2px) scale(1.03); }
+body.privacy-mode .card-value,
+body.privacy-mode .tx-amount,
+body.privacy-mode .bills-summary-amount,
+body.privacy-mode .report-stat-value,
+body.privacy-mode .top-amount,
+body.privacy-mode .budget-amounts,
+body.privacy-mode .goal-header > div:last-child,
+body.privacy-mode .insight-card strong,
+body.privacy-mode .calendar-summary-card strong,
+body.privacy-mode .calendar-day small,
+body.privacy-mode .invoice-box strong,
+body.privacy-mode .card-limit-row,
+body.privacy-mode .card-info-row { filter:blur(7px); user-select:none; }
+body.compact-mode .section-card { padding:14px!important; }
+body.compact-mode .dash-grid { gap:12px; }
+body.compact-mode .dash-card { padding:14px; }
+body.compact-mode .tx-row { padding:10px 8px; }
+.calendar-premium-wrap { display:grid; gap:16px; }
+.calendar-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.calendar-summary-card { padding:16px; border-radius:20px; border:1px solid var(--border); background:var(--surface); box-shadow:var(--shadow); }
+.calendar-summary-card span { display:block; color:var(--text-2); font-size:13px; font-weight:800; }
+.calendar-summary-card strong { display:block; margin-top:6px; font-size:22px; color:var(--text); }
+.finance-calendar { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:8px; }
+.calendar-weekday { text-align:center; color:var(--text-2); font-size:12px; font-weight:900; text-transform:uppercase; padding:8px 0; }
+.calendar-day { min-height:108px; padding:10px; border-radius:18px; background:var(--surface); border:1px solid var(--border); text-align:left; display:flex; flex-direction:column; gap:4px; box-shadow:var(--shadow); transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease; }
+.calendar-day:not(.empty):hover { transform:translateY(-2px); border-color:rgba(99,102,241,.42); box-shadow:0 16px 34px rgba(15,23,42,.10); }
+.calendar-day.empty { opacity:.25; box-shadow:none; background:transparent; }
+.calendar-day.today { border-color:var(--primary); box-shadow:0 12px 30px rgba(99,102,241,.18); }
+.calendar-day.has-items { background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(16,185,129,.05)),var(--surface); }
+.calendar-day-number { font-size:15px; font-weight:900; color:var(--text); margin-bottom:2px; }
+.calendar-day small { font-size:12px; font-weight:900; }
+.calendar-day em { margin-top:auto; width:max-content; padding:4px 7px; border-radius:999px; background:rgba(245,158,11,.16); color:var(--warning); font-size:11px; font-style:normal; font-weight:900; }
+@media(max-width:760px){ .profile-editor{grid-template-columns:1fr}.profile-avatar-preview{width:86px;height:86px}.calendar-summary{grid-template-columns:1fr}.finance-calendar{gap:5px}.calendar-day{min-height:82px;padding:7px;border-radius:13px}.calendar-weekday{font-size:10px}.calendar-day small{font-size:10px}.accent-grid{grid-template-columns:repeat(3,1fr)} }

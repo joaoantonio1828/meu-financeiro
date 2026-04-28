@@ -119,6 +119,9 @@
       <div class="nav-item" data-page="bills" onclick="navigateTo('bills')">
         <span class="nav-icon">📅</span> Contas a Pagar
       </div>
+      <div class="nav-item" data-page="calendar" onclick="navigateTo('calendar')">
+        <span class="nav-icon">🗓️</span> Calendário
+      </div>
 
       <div class="nav-section-title" style="margin-top:8px">Gestão</div>
       <div class="nav-item" data-page="cards" onclick="navigateTo('cards')">
@@ -443,6 +446,27 @@
       </div>
 
       <!-- ========================
+           PAGE: CALENDAR
+      ======================== -->
+      <div id="page-calendar" class="page hidden">
+        <div class="section-header" style="margin-bottom:16px">
+          <div>
+            <div class="section-title">🗓️ Calendário financeiro</div>
+            <div class="section-subtitle month-label">Mês atual</div>
+          </div>
+          <div class="month-nav">
+            <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
+            <span class="month-label">Mês</span>
+            <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
+          </div>
+        </div>
+        <div class="calendar-premium-wrap">
+          <div id="calendar-summary" class="calendar-summary"></div>
+          <div id="calendar-grid" class="finance-calendar"></div>
+        </div>
+      </div>
+
+      <!-- ========================
            PAGE: SETTINGS
       ======================== -->
       <div id="page-settings" class="page hidden">
@@ -462,6 +486,53 @@
         </div>
 
         <div class="settings-grid">
+          <div class="section-card profile-card-premium">
+            <div class="settings-card-icon">👤</div>
+            <div class="section-title">Perfil</div>
+            <p class="settings-text">Personalize o nome e a foto que aparecem no app.</p>
+            <div class="profile-editor">
+              <div class="profile-avatar-preview" id="profile-avatar-preview">U</div>
+              <div class="profile-editor-actions">
+                <input type="text" id="profile-display-name" class="form-input" placeholder="Seu nome no app" />
+                <button class="btn-add full-width" onclick="saveProfileName()">Salvar nome</button>
+                <button class="btn-secondary full-width" onclick="document.getElementById('profile-avatar-file').click()">Trocar foto</button>
+                <button class="btn-secondary full-width" onclick="removeProfilePhoto()">Remover foto</button>
+                <input type="file" id="profile-avatar-file" accept="image/*" style="display:none" onchange="handleProfilePhoto(event)">
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card personalization-card">
+            <div class="settings-card-icon">🎛️</div>
+            <div class="section-title">Personalização</div>
+            <p class="settings-text">Escolha a cor principal e deixe o app com a sua cara.</p>
+            <div class="accent-grid">
+              <button class="accent-dot" style="--accent:#6366f1" onclick="setAccentColor('#6366f1')"></button>
+              <button class="accent-dot" style="--accent:#8b5cf6" onclick="setAccentColor('#8b5cf6')"></button>
+              <button class="accent-dot" style="--accent:#0ea5e9" onclick="setAccentColor('#0ea5e9')"></button>
+              <button class="accent-dot" style="--accent:#10b981" onclick="setAccentColor('#10b981')"></button>
+              <button class="accent-dot" style="--accent:#f97316" onclick="setAccentColor('#f97316')"></button>
+              <button class="accent-dot" style="--accent:#ef4444" onclick="setAccentColor('#ef4444')"></button>
+            </div>
+            <button class="btn-add full-width" onclick="toggleCompactMode()">📦 Alternar modo compacto</button>
+            <button class="btn-secondary full-width" onclick="resetPersonalization()">Restaurar padrão</button>
+          </div>
+
+          <div class="section-card privacy-card">
+            <div class="settings-card-icon">🙈</div>
+            <div class="section-title">Privacidade</div>
+            <p class="settings-text">Esconda valores na tela quando estiver perto de outras pessoas.</p>
+            <button class="btn-add full-width" id="privacy-toggle-btn" onclick="togglePrivacyMode()">🙈 Esconder valores</button>
+            <div class="account-pill" id="privacy-status">Valores visíveis</div>
+          </div>
+
+          <div class="section-card calendar-card">
+            <div class="settings-card-icon">🗓️</div>
+            <div class="section-title">Calendário financeiro</div>
+            <p class="settings-text">Veja gastos, receitas, contas e pendências espalhados pelos dias do mês.</p>
+            <button class="btn-add full-width" onclick="navigateTo('calendar')">Abrir calendário</button>
+          </div>
+
           <div class="section-card app-store-card">
             <div class="settings-card-icon">📲</div>
             <div class="section-title">Instalar como app</div>
@@ -550,16 +621,16 @@
         <span class="bottom-nav-icon">🏠</span><span>Início</span>
       </div>
       <div class="bottom-nav-item" data-page="transactions" onclick="navigateTo('transactions')">
-        <span class="bottom-nav-icon">💸</span><span>Lançamentos</span>
-      </div>
-      <div class="bottom-nav-item" data-page="bills" onclick="navigateTo('bills')">
-        <span class="bottom-nav-icon">📅</span><span>Contas</span>
-      </div>
-      <div class="bottom-nav-item" data-page="cards" onclick="navigateTo('cards')">
-        <span class="bottom-nav-icon">💳</span><span>Cartões</span>
+        <span class="bottom-nav-icon">💸</span><span>Lanç.</span>
       </div>
       <div class="bottom-nav-item" data-page="pending" onclick="navigateTo('pending')">
         <span class="bottom-nav-icon">🧾</span><span>Pend.</span>
+      </div>
+      <div class="bottom-nav-item" data-page="calendar" onclick="navigateTo('calendar')">
+        <span class="bottom-nav-icon">🗓️</span><span>Agenda</span>
+      </div>
+      <div class="bottom-nav-item" data-page="cards" onclick="navigateTo('cards')">
+        <span class="bottom-nav-icon">💳</span><span>Cartões</span>
       </div>
       <div class="bottom-nav-item" data-page="settings" onclick="navigateTo('settings')">
         <span class="bottom-nav-icon">⚙️</span><span>Ajustes</span>
