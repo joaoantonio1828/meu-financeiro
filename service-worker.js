@@ -1,6 +1,5 @@
 const CACHE_NAME = 'financeiro-premium-v1';
-const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json',
-  '/quick.html', '/icon-192.png', '/icon-512.png'];
+const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).catch(() => null));

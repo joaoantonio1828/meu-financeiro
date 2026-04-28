@@ -112,15 +112,11 @@
       <div class="nav-item" data-page="transactions" onclick="navigateTo('transactions')">
         <span class="nav-icon">💸</span> Lançamentos
       </div>
-      <div class="nav-item" data-page="pending" onclick="navigateTo('pending')">
-        <span class="nav-icon">🧾</span> Pendências
-        <span class="nav-badge" id="pending-nav-count">0</span>
+      <div class="nav-item" data-page="pending-review" onclick="navigateTo('pending-review')">
+        <span class="nav-icon">⚡</span> Pendências
       </div>
       <div class="nav-item" data-page="bills" onclick="navigateTo('bills')">
         <span class="nav-icon">📅</span> Contas a Pagar
-      </div>
-      <div class="nav-item" data-page="calendar" onclick="navigateTo('calendar')">
-        <span class="nav-icon">🗓️</span> Calendário
       </div>
 
       <div class="nav-section-title" style="margin-top:8px">Gestão</div>
@@ -248,13 +244,10 @@
             <button class="btn-add btn-quick" onclick="openQuickAdd()">⚡ Lançamento rápido</button>
             <button class="btn-add btn-add-income" onclick="openNewTransaction('income')">📈 Nova receita</button>
             <button class="btn-add btn-add-expense" onclick="openNewTransaction('expense')">📉 Nova despesa</button>
-            <button class="btn-add pending-action" onclick="navigateTo('pending')">🧾 Revisar pendências <span id="pending-action-count">0</span></button>
             <button class="btn-add" onclick="navigateTo('cards');openNewCard()">💳 Nova compra no cartão</button>
             <button class="btn-add" style="background:linear-gradient(135deg,var(--warning),#d97706)" onclick="navigateTo('bills')">📅 Ver contas a pagar</button>
           </div>
         </div>
-
-        <div id="premium-insights" style="margin-top:20px"></div>
       </div>
 
       <!-- ========================
@@ -270,7 +263,6 @@
             <div style="display:flex;gap:8px">
               <button class="btn-add btn-add-income" onclick="openNewTransaction('income')">+ Receita</button>
               <button class="btn-add btn-add-expense" onclick="openNewTransaction('expense')">+ Despesa</button>
-              <button class="btn-add btn-quick" onclick="openSmartQuickAdd()">⚡ Inteligente</button>
             </div>
           </div>
 
@@ -295,27 +287,6 @@
 
           <div id="transactions-list"></div>
         </div>
-      </div>
-
-      <!-- ========================
-           PAGE: PENDING REVIEW
-      ======================== -->
-      <div id="page-pending" class="page hidden">
-        <div class="section-card pending-hero-card">
-          <div class="section-header">
-            <div>
-              <div class="section-title">🧾 Pendências para revisar</div>
-              <div class="section-subtitle">Lançamentos rápidos feitos pelo atalho do iPhone ficam aqui até você completar.</div>
-            </div>
-            <button class="btn-add btn-quick" onclick="window.open('quick.html','_blank')">⚡ Abrir tela rápida</button>
-          </div>
-          <div class="pending-summary-grid">
-            <div class="pending-summary-item"><span>Total pendente</span><strong id="pending-total">R$ 0,00</strong></div>
-            <div class="pending-summary-item"><span>Quantidade</span><strong id="pending-count">0</strong></div>
-            <div class="pending-summary-item"><span>Dica</span><strong>Complete depois</strong></div>
-          </div>
-        </div>
-        <div id="pending-list"></div>
       </div>
 
       <!-- ========================
@@ -445,24 +416,25 @@
         </div>
       </div>
 
-      <!-- ========================
-           PAGE: CALENDAR
-      ======================== -->
-      <div id="page-calendar" class="page hidden">
+
+      <!-- PAGE: PENDÊNCIAS -->
+      <div id="page-pending-review" class="page hidden">
         <div class="section-header" style="margin-bottom:16px">
           <div>
-            <div class="section-title">🗓️ Calendário financeiro</div>
-            <div class="section-subtitle month-label">Mês atual</div>
+            <div class="section-title">⚡ Pendências rápidas</div>
+            <div class="section-subtitle">Lançamentos feitos pelo atalho do iPhone para completar depois</div>
           </div>
-          <div class="month-nav">
-            <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
-            <span class="month-label">Mês</span>
-            <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
-          </div>
+          <button class="btn-add btn-quick" onclick="openQuickAdd()">⚡ Novo rápido</button>
         </div>
-        <div class="calendar-premium-wrap">
-          <div id="calendar-summary" class="calendar-summary"></div>
-          <div id="calendar-grid" class="finance-calendar"></div>
+        <div class="smart-panel pending-hero">
+          <div>
+            <div class="smart-title">Revise quando tiver tempo</div>
+            <div class="smart-sub">Tudo que vier do atalho fica aqui com status pendente e observação [REVISAR].</div>
+          </div>
+          <div class="smart-value" id="pending-count-v5">0</div>
+        </div>
+        <div class="section-card">
+          <div id="pending-review-list"></div>
         </div>
       </div>
 
@@ -486,53 +458,6 @@
         </div>
 
         <div class="settings-grid">
-          <div class="section-card profile-card-premium">
-            <div class="settings-card-icon">👤</div>
-            <div class="section-title">Perfil</div>
-            <p class="settings-text">Personalize o nome e a foto que aparecem no app.</p>
-            <div class="profile-editor">
-              <div class="profile-avatar-preview" id="profile-avatar-preview">U</div>
-              <div class="profile-editor-actions">
-                <input type="text" id="profile-display-name" class="form-input" placeholder="Seu nome no app" />
-                <button class="btn-add full-width" onclick="saveProfileName()">Salvar nome</button>
-                <button class="btn-secondary full-width" onclick="document.getElementById('profile-avatar-file').click()">Trocar foto</button>
-                <button class="btn-secondary full-width" onclick="removeProfilePhoto()">Remover foto</button>
-                <input type="file" id="profile-avatar-file" accept="image/*" style="display:none" onchange="handleProfilePhoto(event)">
-              </div>
-            </div>
-          </div>
-
-          <div class="section-card personalization-card">
-            <div class="settings-card-icon">🎛️</div>
-            <div class="section-title">Personalização</div>
-            <p class="settings-text">Escolha a cor principal e deixe o app com a sua cara.</p>
-            <div class="accent-grid">
-              <button class="accent-dot" style="--accent:#6366f1" onclick="setAccentColor('#6366f1')"></button>
-              <button class="accent-dot" style="--accent:#8b5cf6" onclick="setAccentColor('#8b5cf6')"></button>
-              <button class="accent-dot" style="--accent:#0ea5e9" onclick="setAccentColor('#0ea5e9')"></button>
-              <button class="accent-dot" style="--accent:#10b981" onclick="setAccentColor('#10b981')"></button>
-              <button class="accent-dot" style="--accent:#f97316" onclick="setAccentColor('#f97316')"></button>
-              <button class="accent-dot" style="--accent:#ef4444" onclick="setAccentColor('#ef4444')"></button>
-            </div>
-            <button class="btn-add full-width" onclick="toggleCompactMode()">📦 Alternar modo compacto</button>
-            <button class="btn-secondary full-width" onclick="resetPersonalization()">Restaurar padrão</button>
-          </div>
-
-          <div class="section-card privacy-card">
-            <div class="settings-card-icon">🙈</div>
-            <div class="section-title">Privacidade</div>
-            <p class="settings-text">Esconda valores na tela quando estiver perto de outras pessoas.</p>
-            <button class="btn-add full-width" id="privacy-toggle-btn" onclick="togglePrivacyMode()">🙈 Esconder valores</button>
-            <div class="account-pill" id="privacy-status">Valores visíveis</div>
-          </div>
-
-          <div class="section-card calendar-card">
-            <div class="settings-card-icon">🗓️</div>
-            <div class="section-title">Calendário financeiro</div>
-            <p class="settings-text">Veja gastos, receitas, contas e pendências espalhados pelos dias do mês.</p>
-            <button class="btn-add full-width" onclick="navigateTo('calendar')">Abrir calendário</button>
-          </div>
-
           <div class="section-card app-store-card">
             <div class="settings-card-icon">📲</div>
             <div class="section-title">Instalar como app</div>
@@ -548,27 +473,11 @@
             <button class="btn-add btn-quick full-width" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
           </div>
 
-          <div class="section-card shortcut-card">
-            <div class="settings-card-icon">📱</div>
-            <div class="section-title">Atalho rápido do iPhone</div>
-            <p class="settings-text">Crie um ícone separado na tela inicial para abrir só a tela rápida. Ele salva como pendência para você revisar depois.</p>
-            <button class="btn-add btn-quick full-width" onclick="openQuickCapture()">⚡ Testar tela rápida</button>
-            <button class="btn-secondary full-width" onclick="showQuickShortcutGuide()">🍎 Como adicionar atalho</button>
-          </div>
-
           <div class="section-card">
             <div class="settings-card-icon">🎨</div>
             <div class="section-title">Aparência</div>
             <p class="settings-text">Alterne entre modo claro e escuro. A escolha fica salva neste aparelho.</p>
             <button class="btn-add full-width" onclick="toggleTheme()">🌙 Alternar tema</button>
-          </div>
-
-          <div class="section-card premium-notify-card">
-            <div class="settings-card-icon">🔔</div>
-            <div class="section-title">Notificações</div>
-            <p class="settings-text">Ative alertas neste aparelho para lembretes e testes. No iPhone, instale na Tela de Início primeiro.</p>
-            <div class="account-pill" id="notification-status">Verificando...</div>
-            <button class="btn-add full-width" onclick="enableBrowserNotifications()">🔔 Ativar notificações</button>
           </div>
 
           <div class="section-card">
@@ -586,6 +495,43 @@
             <p class="settings-text">E-mail logado:</p>
             <div class="account-pill" id="settings-email">email@email.com</div>
             <button class="btn-secondary full-width" onclick="handleLogout()">Sair da conta</button>
+          </div>
+
+
+          <div class="section-card premium-settings-card" id="security-settings-card-v5">
+            <div class="settings-card-icon">🔐</div>
+            <div class="section-title">Segurança</div>
+            <p class="settings-text">Ative PIN de 4 dígitos, bloqueio ao abrir e opção de biometria/Face ID como atalho visual.</p>
+            <div class="settings-toggle-row"><span>Usar PIN ao abrir</span><label class="switch"><input type="checkbox" id="pin-enabled-toggle" onchange="togglePinSecurity(this.checked)"><span></span></label></div>
+            <div class="settings-toggle-row"><span>Bloquear ao trocar de app</span><label class="switch"><input type="checkbox" id="lock-blur-toggle" onchange="setSecurityOption('lockOnBlur', this.checked)"><span></span></label></div>
+            <div class="settings-toggle-row"><span>Face ID / biometria</span><label class="switch"><input type="checkbox" id="biometric-toggle" onchange="setSecurityOption('biometric', this.checked)"><span></span></label></div>
+            <button class="btn-add full-width" onclick="setPinFlow()">🔢 Definir/alterar PIN</button>
+            <button class="btn-secondary full-width" onclick="lockAppNow()">🔒 Bloquear agora</button>
+          </div>
+
+          <div class="section-card premium-settings-card">
+            <div class="settings-card-icon">🧠</div>
+            <div class="section-title">Inteligência financeira</div>
+            <p class="settings-text">Sugestão automática de categoria, alertas e resumo inteligente do mês.</p>
+            <div class="settings-toggle-row"><span>Categorias automáticas</span><label class="switch"><input type="checkbox" id="smart-cat-toggle" onchange="setV5Option('smartCategories', this.checked)"><span></span></label></div>
+            <div class="settings-toggle-row"><span>Alertas inteligentes</span><label class="switch"><input type="checkbox" id="smart-alert-toggle" onchange="setV5Option('smartAlerts', this.checked)"><span></span></label></div>
+            <button class="btn-add full-width" onclick="showSmartMonthlySummary()">📊 Ver análise do mês</button>
+          </div>
+
+          <div class="section-card premium-settings-card">
+            <div class="settings-card-icon">🔁</div>
+            <div class="section-title">Recorrências rápidas</div>
+            <p class="settings-text">Crie despesas fixas mensais como internet, academia e aluguel.</p>
+            <button class="btn-add full-width" onclick="addRecurringPrompt()">➕ Criar recorrência</button>
+            <button class="btn-secondary full-width" onclick="manageRecurringPrompt()">📋 Ver recorrências</button>
+          </div>
+
+          <div class="section-card premium-settings-card">
+            <div class="settings-card-icon">👁️</div>
+            <div class="section-title">Privacidade e visual</div>
+            <p class="settings-text">Esconda valores em público e use layout compacto.</p>
+            <div class="settings-toggle-row"><span>Esconder valores</span><label class="switch"><input type="checkbox" id="privacy-toggle" onchange="togglePrivacyMode(this.checked)"><span></span></label></div>
+            <div class="settings-toggle-row"><span>Modo compacto</span><label class="switch"><input type="checkbox" id="compact-toggle" onchange="toggleCompactMode(this.checked)"><span></span></label></div>
           </div>
 
           <div class="section-card danger-zone">
@@ -621,16 +567,19 @@
         <span class="bottom-nav-icon">🏠</span><span>Início</span>
       </div>
       <div class="bottom-nav-item" data-page="transactions" onclick="navigateTo('transactions')">
-        <span class="bottom-nav-icon">💸</span><span>Lanç.</span>
+        <span class="bottom-nav-icon">💸</span><span>Lançamentos</span>
       </div>
-      <div class="bottom-nav-item" data-page="pending" onclick="navigateTo('pending')">
-        <span class="bottom-nav-icon">🧾</span><span>Pend.</span>
+      <div class="bottom-nav-item" data-page="pending-review" onclick="navigateTo('pending-review')">
+        <span class="bottom-nav-icon">⚡</span><span>Pendências</span>
       </div>
-      <div class="bottom-nav-item" data-page="calendar" onclick="navigateTo('calendar')">
-        <span class="bottom-nav-icon">🗓️</span><span>Agenda</span>
+      <div class="bottom-nav-item" data-page="bills" onclick="navigateTo('bills')">
+        <span class="bottom-nav-icon">📅</span><span>Contas</span>
       </div>
       <div class="bottom-nav-item" data-page="cards" onclick="navigateTo('cards')">
         <span class="bottom-nav-icon">💳</span><span>Cartões</span>
+      </div>
+      <div class="bottom-nav-item" data-page="reports" onclick="navigateTo('reports')">
+        <span class="bottom-nav-icon">📊</span><span>Relatórios</span>
       </div>
       <div class="bottom-nav-item" data-page="settings" onclick="navigateTo('settings')">
         <span class="bottom-nav-icon">⚙️</span><span>Ajustes</span>
@@ -639,23 +588,6 @@
   </nav>
 
 </div><!-- /app-screen -->
-
-<!-- ============================================================
-     MODAL: LANÇAMENTO INTELIGENTE
-============================================================ -->
-<div class="modal-overlay" id="smart-quick-modal">
-  <div class="modal smart-modal">
-    <div class="modal-header"><div class="modal-title">⚡ Lançamento inteligente</div><button class="modal-close" onclick="closeModal('smart-quick-modal')">✕</button></div>
-    <form onsubmit="saveSmartQuickAdd(event)">
-      <p class="settings-text">Digite do jeito natural: <b>50 mercado</b>, <b>18 café</b>, <b>120 gasolina</b>.</p>
-      <div class="form-group"><label class="form-label">Lançamento rápido</label><input type="text" id="smart-quick-input" class="form-input smart-input" placeholder="Ex: 50 mercado" oninput="updateSmartPreview()" autocomplete="off" required /></div>
-      <div class="form-group"><label class="form-label">Pagamento</label><select id="smart-quick-payment" class="form-input"><option value="pix">💸 PIX</option><option value="credit_card">💳 Cartão</option><option value="money">💵 Dinheiro</option><option value="debit_card">💳 Débito</option></select></div>
-      <div class="smart-preview" id="smart-quick-preview">Exemplo: <b>50 mercado</b></div>
-      <label class="review-toggle"><input type="checkbox" id="smart-quick-review" checked /> Mandar para Pendências e completar depois</label>
-      <div class="modal-footer"><button type="button" class="btn-secondary" onclick="closeModal('smart-quick-modal')">Cancelar</button><button type="submit" class="btn-primary">Salvar</button></div>
-    </form>
-  </div>
-</div>
 
 <!-- ============================================================
      MODAL: TRANSAÇÃO
@@ -998,6 +930,18 @@
       <button class="btn-secondary" onclick="closeModal('confirm-modal')">Cancelar</button>
       <button class="btn-danger" id="confirm-delete-btn">Excluir</button>
     </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="lock-modal-v5">
+  <div class="modal lock-modal">
+    <div class="lock-shield">🔐</div>
+    <div class="modal-title" style="text-align:center;margin-bottom:8px">App bloqueado</div>
+    <p class="settings-text" style="text-align:center;margin-bottom:16px">Digite seu PIN de 4 dígitos para continuar.</p>
+    <input type="password" id="pin-input-v5" class="form-input pin-input" maxlength="4" inputmode="numeric" placeholder="••••" />
+    <button class="btn-primary full-width" onclick="unlockWithPin()">Desbloquear</button>
+    <button class="btn-secondary full-width" id="bio-unlock-btn" onclick="unlockWithBiometric()">Face ID / Biometria</button>
   </div>
 </div>
 

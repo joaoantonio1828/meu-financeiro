@@ -33,8 +33,6 @@ let allGoals = [];
 let charts = {};
 let deferredInstallPrompt = null;
 let installTipShown = false;
-let cachedUserPrefs = {};
-
 
 // ============================================================
 // INICIALIZAÇÃO
@@ -75,13 +73,9 @@ async function showApp() {
   document.getElementById('app-screen').classList.remove('hidden');
   document.getElementById('user-name').textContent = currentUser.email.split('@')[0];
   document.getElementById('user-email').textContent = currentUser.email;
-  loadUserPreferences();
-  applyUserPreferences();
   await loadAllData();
-  updatePendingBadges();
   initPWAExperience();
-  const initialPage = new URLSearchParams(window.location.search).get('pending') === '1' ? 'pending' : 'dashboard';
-  navigateTo(initialPage);
+  navigateTo('dashboard');
 }
 
 // ============================================================
@@ -190,7 +184,7 @@ function navigateTo(page) {
   const titleMap = {
     dashboard: 'Dashboard', transactions: 'Lançamentos', bills: 'Contas a Pagar',
     cards: 'Cartões', categories: 'Categorias', budgets: 'Metas e Orçamentos',
-    reports: 'Relatórios', pending: 'Pendências', calendar: 'Calendário', settings: 'Configurações'
+    reports: 'Relatórios', settings: 'Configurações'
   };
   const titleEl = document.querySelector('.page-title');
   if (titleEl) titleEl.textContent = titleMap[page] || 'Controle Financeiro';
@@ -198,13 +192,12 @@ function navigateTo(page) {
   switch (page) {
     case 'dashboard': renderDashboard(); break;
     case 'transactions': renderTransactions(); break;
+    case 'pending-review': renderPendingReview(); break;
     case 'bills': renderBills(); break;
     case 'cards': renderCards(); break;
     case 'categories': renderCategories(); break;
     case 'budgets': renderBudgets(); break;
     case 'reports': renderReports(); break;
-    case 'pending': renderPendingReviews(); break;
-    case 'calendar': renderCalendar(); break;
     case 'settings': renderSettings(); break;
   }
 
@@ -267,205 +260,6 @@ async function loadGoals() {
   if (!error) allGoals = data || [];
 }
 
-
-// ============================================================
-// V2 PREMIUM: FATURAS, ALERTAS E INTELIGÊNCIA
-// ============================================================
-function monthKeyFromDate(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function getInvoiceMonthForPurchase(card, purchaseDateStr) {
-  const d = new Date(purchaseDateStr + 'T00:00:00');
-  const invoice = new Date(d);
-  const closingDay = parseInt(card?.closing_day || 31);
-  if (d.getDate() > closingDay) invoice.setMonth(invoice.getMonth() + 1);
-  return { month: invoice.getMonth() + 1, year: invoice.getFullYear(), key: `${invoice.getFullYear()}-${String(invoice.getMonth() + 1).padStart(2, '0')}` };
-}
-
-function getInvoiceDueDate(card, invoiceMonth, invoiceYear) {
-  const dueDay = Math.min(parseInt(card?.due_day || 10), 28);
-  return new Date(invoiceYear, invoiceMonth - 1, dueDay).toISOString().split('T')[0];
-}
-
-function getCardInvoice(card, offset = 0) {
-  const base = new Date(currentYear, currentMonth - 1 + offset, 1);
-  const month = base.getMonth() + 1;
-  const year = base.getFullYear();
-  const key = `${year}-${String(month).padStart(2, '0')}`;
-  const txs = allTransactions.filter(t => {
-    if (t.credit_card_id !== card.id || t.type !== 'expense') return false;
-    return getInvoiceMonthForPurchase(card, t.date).key === key;
-  });
-  const total = txs.reduce((s, t) => s + parseFloat(t.amount || 0), 0);
-  const dueDate = getInvoiceDueDate(card, month, year);
-  return { key, month, year, total, dueDate, txs };
-}
-
-async function payCardInvoice(cardId, offset = 0) {
-  const card = allCards.find(c => c.id === cardId);
-  if (!card) return;
-  const invoice = getCardInvoice(card, offset);
-  if (!invoice.txs.length) { showToast('Nenhuma compra nessa fatura', 'error'); return; }
-  if (!confirm(`Marcar fatura de ${formatCurrency(invoice.total)} como paga?`)) return;
-  const ids = invoice.txs.map(t => t.id);
-  const { error } = await db.from('transactions').update({ status: 'paid' }).in('id', ids).eq('user_id', currentUser.id);
-  if (error) { showToast('Erro ao pagar fatura', 'error'); return; }
-  showToast('Fatura paga!', 'success');
-  await loadTransactions();
-  updatePendingBadges();
-  renderCurrentPage();
-}
-
-function getFinancialAlerts() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const alerts = [];
-  allTransactions.filter(t => t.type === 'expense' && t.status !== 'paid').forEach(t => {
-    const d = new Date(t.date + 'T00:00:00');
-    const diff = Math.round((d - today) / 86400000);
-    if (diff < 0) alerts.push({ type: 'danger', icon: '🚨', title: 'Conta vencida', text: `${t.description} venceu há ${Math.abs(diff)} dia(s): ${formatCurrency(t.amount)}` });
-    else if (diff <= 2) alerts.push({ type: 'warning', icon: '⏰', title: 'Conta perto de vencer', text: `${t.description} vence ${diff === 0 ? 'hoje' : 'em ' + diff + ' dia(s)'}: ${formatCurrency(t.amount)}` });
-  });
-  allBudgets.filter(b => b.month === currentMonth && b.year === currentYear).forEach(b => {
-    const key = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
-    const spent = allTransactions.filter(t => t.category_id === b.category_id && t.type === 'expense' && t.status === 'paid' && monthKeyFromDate(t.date) === key).reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const pct = b.amount > 0 ? (spent / b.amount) * 100 : 0;
-    const cat = allCategories.find(c => c.id === b.category_id);
-    if (pct >= 100) alerts.push({ type: 'danger', icon: '🔥', title: 'Orçamento estourado', text: `${cat?.name || 'Categoria'} passou do limite: ${formatCurrency(spent)} / ${formatCurrency(b.amount)}` });
-    else if (pct >= 80) alerts.push({ type: 'warning', icon: '⚠️', title: 'Orçamento quase no limite', text: `${cat?.name || 'Categoria'} já usou ${pct.toFixed(0)}% do orçamento.` });
-  });
-  return alerts.slice(0, 6);
-}
-
-function getSmartInsights(monthTxs) {
-  const paidExpenses = monthTxs.filter(t => t.type === 'expense' && t.status === 'paid');
-  const paidIncome = monthTxs.filter(t => t.type === 'income' && t.status === 'paid');
-  const income = paidIncome.reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const expenses = paidExpenses.reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const today = new Date();
-  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-  const elapsed = currentYear === today.getFullYear() && currentMonth === today.getMonth()+1 ? Math.max(1, today.getDate()) : daysInMonth;
-  const projectedExpenses = expenses > 0 ? expenses / elapsed * daysInMonth : 0;
-  const projectedBalance = income - projectedExpenses;
-  const previousDate = new Date(currentYear, currentMonth - 2, 1);
-  const prevKey = `${previousDate.getFullYear()}-${String(previousDate.getMonth()+1).padStart(2,'0')}`;
-  const prevExpenses = allTransactions.filter(t => t.type === 'expense' && t.status === 'paid' && monthKeyFromDate(t.date) === prevKey).reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const diffPct = prevExpenses > 0 ? ((expenses - prevExpenses) / prevExpenses) * 100 : 0;
-  return { income, expenses, projectedExpenses, projectedBalance, prevExpenses, diffPct };
-}
-
-function renderPremiumInsights(monthTxs) {
-  const wrap = document.getElementById('premium-insights');
-  if (!wrap) return;
-  const data = getSmartInsights(monthTxs);
-  const alerts = getFinancialAlerts();
-  wrap.innerHTML = `
-    <div class="premium-panel">
-      <div class="premium-panel-head">
-        <div><div class="section-title">🧠 Inteligência financeira</div><div class="section-subtitle">Previsão, comparação e alertas do mês</div></div>
-        <button class="btn-add btn-quick" onclick="openSmartQuickAdd()">⚡ Lançar inteligente</button>
-      </div>
-      <div class="insight-grid">
-        <div class="insight-card"><span>Saldo previsto</span><strong class="${data.projectedBalance >= 0 ? 'positive' : 'negative'}">${formatCurrency(data.projectedBalance)}</strong><small>estimativa para o fim do mês</small></div>
-        <div class="insight-card"><span>Gasto previsto</span><strong>${formatCurrency(data.projectedExpenses)}</strong><small>se continuar nesse ritmo</small></div>
-        <div class="insight-card"><span>Vs. mês passado</span><strong class="${data.diffPct <= 0 ? 'positive' : 'negative'}">${data.prevExpenses ? (data.diffPct > 0 ? '+' : '') + data.diffPct.toFixed(0) + '%' : '—'}</strong><small>${data.prevExpenses ? 'comparado ao mês anterior' : 'sem base anterior'}</small></div>
-      </div>
-      <div class="alerts-list">${alerts.length ? alerts.map(a => `<div class="alert-chip ${a.type}"><b>${a.icon} ${a.title}</b><span>${a.text}</span></div>`).join('') : `<div class="alert-chip success"><b>✅ Tudo tranquilo</b><span>Nenhum alerta crítico agora.</span></div>`} </div>
-    </div>`;
-}
-
-function parseSmartText(raw) {
-  const text = (raw || '').trim();
-  const amountMatch = text.match(/(\d+(?:[\.,]\d{1,2})?)/);
-  const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '.')) : 0;
-  let clean = text.replace(amountMatch?.[0] || '', '').trim();
-  const normalizedFull = text.toLowerCase();
-
-  let payment_method = null;
-  const paymentRules = [
-    ['pix', 'pix'], ['cartao', 'credit_card'], ['cartão', 'credit_card'], ['credito', 'credit_card'], ['crédito', 'credit_card'],
-    ['debito', 'debit_card'], ['débito', 'debit_card'], ['dinheiro', 'money'], ['cash', 'money'], ['boleto', 'boleto']
-  ];
-  const payHit = paymentRules.find(([key]) => normalizedFull.includes(key));
-  if (payHit) {
-    payment_method = payHit[1];
-    clean = clean.replace(new RegExp(payHit[0], 'ig'), '').trim();
-  }
-
-  const description = clean || 'Lançamento rápido';
-  const normalized = description.toLowerCase();
-  let category = allCategories.find(c => normalized.includes(c.name.toLowerCase()));
-  if (!category) {
-    const rules = [
-      ['mercado','Mercado'],['supermercado','Mercado'],['compras','Mercado'],
-      ['almoço','Alimentação'],['almoco','Alimentação'],['janta','Alimentação'],['lanche','Alimentação'],['café','Alimentação'],['cafe','Alimentação'],['ifood','Alimentação'],
-      ['gasolina','Combustível'],['combustivel','Combustível'],['combustível','Combustível'],['posto','Combustível'],
-      ['uber','Transporte'],['99','Transporte'],['onibus','Transporte'],['ônibus','Transporte'],
-      ['academia','Academia'],['internet','Internet'],['energia','Energia'],['luz','Energia'],['água','Água'],['agua','Água'],
-      ['netflix','Assinaturas'],['spotify','Assinaturas'],['assinatura','Assinaturas'],['farmacia','Saúde'],['farmácia','Saúde'],['remedio','Saúde']
-    ];
-    const hit = rules.find(([k]) => normalized.includes(k));
-    if (hit) category = allCategories.find(c => c.name.toLowerCase() === hit[1].toLowerCase());
-  }
-  return { amount, description, category_id: category?.id || null, payment_method };
-}
-
-function openSmartQuickAdd() {
-  const input = document.getElementById('smart-quick-input');
-  const preview = document.getElementById('smart-quick-preview');
-  if (input) input.value = '';
-  if (preview) preview.innerHTML = 'Exemplo: <b>50 mercado</b> ou <b>18 café</b>';
-  openModal('smart-quick-modal');
-  setTimeout(() => input?.focus(), 150);
-}
-
-function updateSmartPreview() {
-  const input = document.getElementById('smart-quick-input');
-  const preview = document.getElementById('smart-quick-preview');
-  if (!input || !preview) return;
-  const data = parseSmartText(input.value);
-  const cat = allCategories.find(c => c.id === data.category_id);
-  preview.innerHTML = data.amount > 0 ? `Vai salvar: <b>${formatCurrency(data.amount)}</b> · ${data.description} · ${cat ? cat.icon + ' ' + cat.name : 'Sem categoria'}${data.payment_method ? ' · ' + paymentLabel(data.payment_method) : ''}` : 'Digite algo tipo: <b>50 mercado pix</b>';
-}
-
-async function saveSmartQuickAdd(e) {
-  e.preventDefault();
-  const input = document.getElementById('smart-quick-input');
-  const paymentEl = document.getElementById('smart-quick-payment');
-  const reviewEl = document.getElementById('smart-quick-review');
-  const data = parseSmartText(input.value);
-  if (!data.amount) { showToast('Digite o valor. Ex: 50 mercado', 'error'); return; }
-  const payment_method = paymentEl?.value || 'pix';
-  const needsReview = reviewEl?.checked !== false;
-  const notes = needsReview ? makeReviewNotes('Lançamento rápido dentro do app') : 'Lançamento inteligente';
-  const { error } = await db.from('transactions').insert({
-    user_id: currentUser.id,
-    type: 'expense',
-    description: data.description,
-    amount: data.amount,
-    date: new Date().toISOString().split('T')[0],
-    category_id: needsReview ? null : data.category_id,
-    status: needsReview ? 'pending' : 'paid',
-    payment_method,
-    notes
-  });
-  if (error) { showToast('Erro ao salvar lançamento rápido', 'error'); return; }
-  closeModal('smart-quick-modal');
-  showToast(needsReview ? 'Salvo em Pendências!' : 'Lançamento inteligente salvo!', 'success');
-  if (navigator.vibrate) navigator.vibrate(25);
-  await loadTransactions();
-  updatePendingBadges();
-  renderCurrentPage();
-}
-
-async function enableBrowserNotifications() {
-  if (!('Notification' in window)) { showToast('Este navegador não suporta notificações', 'error'); return; }
-  const permission = await Notification.requestPermission();
-  if (permission === 'granted') { new Notification('Controle Financeiro', { body: 'Notificações ativadas neste aparelho ✅', icon: '/icon-192.png' }); showToast('Notificações ativadas!', 'success'); }
-  else showToast('Notificação não permitida', 'error');
-}
-
 // ============================================================
 // DASHBOARD
 // ============================================================
@@ -515,8 +309,6 @@ function renderDashboard() {
   }
 
   renderDashboardChart(monthTxs);
-  renderPremiumInsights(monthTxs);
-  updatePendingBadges();
 }
 
 function renderDashboardChart(txs) {
@@ -572,8 +364,6 @@ function changeMonth(dir) {
   if (currentPage === 'bills') renderBills();
   if (currentPage === 'budgets') renderBudgets();
   if (currentPage === 'reports') renderReports();
-  if (currentPage === 'calendar') renderCalendar();
-  if (currentPage === 'pending') renderPendingReviews();
 }
 
 function updateMonthLabel() {
@@ -699,7 +489,7 @@ async function openEditTransaction(id) {
   document.getElementById('tx-date').value = t.date;
   document.getElementById('tx-status').value = t.status;
   document.getElementById('tx-payment').value = t.payment_method;
-  document.getElementById('tx-notes').value = cleanReviewNotes(t.notes || '');
+  document.getElementById('tx-notes').value = t.notes || '';
   document.getElementById('tx-installments').value = '1';
 
   populateCategorySelect(t.type, t.category_id);
@@ -750,12 +540,14 @@ async function saveTransaction(e) {
   const description = document.getElementById('tx-description').value.trim();
   const amount = parseCurrency(document.getElementById('tx-amount').value);
   const date = document.getElementById('tx-date').value;
-  const category_id = document.getElementById('tx-category').value || null;
+  let category_id = document.getElementById('tx-category').value || null;
   const status = document.getElementById('tx-status').value;
   const payment_method = document.getElementById('tx-payment').value;
   const credit_card_id = document.getElementById('tx-card').value || null;
   const notes = document.getElementById('tx-notes').value.trim();
   const installments = parseInt(document.getElementById('tx-installments')?.value || '1');
+
+  category_id = smartSuggestCategoryId(description, type, category_id);
 
   if (!description || !amount || !date) {
     showToast('Preencha os campos obrigatórios', 'error');
@@ -771,7 +563,7 @@ async function saveTransaction(e) {
       payment_method, credit_card_id, notes
     }).eq('id', id);
     if (error) { showToast('Erro ao salvar', 'error'); }
-    else { showToast('Lançamento atualizado!', 'success'); if (navigator.vibrate) navigator.vibrate(20); }
+    else { showToast('Lançamento atualizado!', 'success'); }
   } else {
     // Criar novo (com parcelamento se for cartão)
     if (installments > 1 && payment_method === 'credit_card') {
@@ -912,25 +704,51 @@ async function markAsPaid(id) {
 // ============================================================
 function renderCards() {
   const listEl = document.getElementById('cards-list');
-  if (allCards.length === 0) { listEl.innerHTML = emptyState('Nenhum cartão cadastrado', '💳'); return; }
+  if (allCards.length === 0) {
+    listEl.innerHTML = emptyState('Nenhum cartão cadastrado', '💳');
+    return;
+  }
+
   listEl.innerHTML = allCards.map(card => {
-    const currentInvoice = getCardInvoice(card, 0);
-    const nextInvoice = getCardInvoice(card, 1);
-    const usedLimit = allTransactions.filter(t => t.credit_card_id === card.id && t.type === 'expense' && t.status !== 'paid').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
-    const available = parseFloat(card.credit_limit || 0) - usedLimit;
-    const pct = card.credit_limit > 0 ? Math.min(100, (usedLimit / card.credit_limit) * 100).toFixed(0) : 0;
+    const today = new Date();
+    const currentPeriodStart = getCardPeriodStart(card, today);
+    const currentPeriodEnd = getCardPeriodEnd(card, today);
+
+    const purchases = allTransactions.filter(t =>
+      t.credit_card_id === card.id &&
+      t.type === 'expense' &&
+      t.date >= currentPeriodStart &&
+      t.date <= currentPeriodEnd
+    );
+    const used = purchases.reduce((s, t) => s + parseFloat(t.amount), 0);
+    const available = parseFloat(card.credit_limit) - used;
+    const pct = card.credit_limit > 0 ? Math.min(100, (used / card.credit_limit) * 100).toFixed(0) : 0;
     const barColor = pct > 80 ? 'var(--danger)' : pct > 50 ? 'var(--warning)' : 'var(--success)';
+
     return `
-      <div class="card-item premium-credit-card" style="background: linear-gradient(135deg, ${card.color}, ${card.color}aa)">
-        <div class="card-glow"></div>
-        <div class="card-header-row"><div class="card-name">${card.name}</div><div class="card-brand">${brandIcon(card.brand)}</div></div>
-        <div class="card-limit-row"><span>Limite: ${formatCurrency(card.credit_limit)}</span><span>Disponível: ${formatCurrency(available)}</span></div>
-        <div class="card-progress-bar"><div class="card-progress-fill" style="width:${pct}%;background:${barColor}"></div></div>
-        <div class="invoice-grid">
-          <div class="invoice-box"><small>Fatura atual · vence ${formatDateBR(currentInvoice.dueDate)}</small><strong>${formatCurrency(currentInvoice.total)}</strong><button class="mini-pay-btn" onclick="payCardInvoice('${card.id}',0)">Pagar fatura</button></div>
-          <div class="invoice-box muted"><small>Próxima fatura</small><strong>${formatCurrency(nextInvoice.total)}</strong><span>${nextInvoice.txs.length} compra(s)</span></div>
+      <div class="card-item" style="background: linear-gradient(135deg, ${card.color}, ${card.color}99)">
+        <div class="card-header-row">
+          <div class="card-name">${card.name}</div>
+          <div class="card-brand">${brandIcon(card.brand)}</div>
         </div>
-        <div class="card-actions-row"><span class="card-dates">Fecha dia ${card.closing_day} · Vence dia ${card.due_day}</span><div><button class="btn-icon" onclick="openEditCard('${card.id}')">✏️</button><button class="btn-icon" onclick="confirmDelete('card','${card.id}')">🗑️</button></div></div>
+        <div class="card-limit-row">
+          <span>Limite: ${formatCurrency(card.credit_limit)}</span>
+          <span>Disponível: ${formatCurrency(available)}</span>
+        </div>
+        <div class="card-progress-bar">
+          <div class="card-progress-fill" style="width:${pct}%;background:${barColor}"></div>
+        </div>
+        <div class="card-info-row">
+          <span>Fatura: ${formatCurrency(used)}</span>
+          <span>${pct}% usado</span>
+        </div>
+        <div class="card-actions-row">
+          <span class="card-dates">Fecha dia ${card.closing_day} · Vence dia ${card.due_day}</span>
+          <div>
+            <button class="btn-icon" onclick="openEditCard('${card.id}')">✏️</button>
+            <button class="btn-icon" onclick="confirmDelete('card','${card.id}')">🗑️</button>
+          </div>
+        </div>
       </div>
     `;
   }).join('');
@@ -1338,112 +1156,6 @@ async function saveGoal(e) {
   }
 }
 
-
-// ============================================================
-// PENDÊNCIAS DE LANÇAMENTO RÁPIDO
-// ============================================================
-const REVIEW_MARKER = '[PENDENCIA_REVISAO]';
-
-function makeReviewNotes(extra = '') {
-  return `${REVIEW_MARKER} ${extra}`.trim();
-}
-
-function isReviewPending(t) {
-  return (t.notes || '').includes(REVIEW_MARKER);
-}
-
-function cleanReviewNotes(notes = '') {
-  return notes.replace(REVIEW_MARKER, '').replace('Lançamento rápido dentro do app', '').replace('Atalho rápido iPhone', '').trim();
-}
-
-function getPendingReviews() {
-  return allTransactions
-    .filter(isReviewPending)
-    .sort((a, b) => b.date.localeCompare(a.date));
-}
-
-function updatePendingBadges() {
-  const count = getPendingReviews().length;
-  const nav = document.getElementById('pending-nav-count');
-  const action = document.getElementById('pending-action-count');
-  if (nav) { nav.textContent = count; nav.style.display = count ? 'inline-flex' : 'none'; }
-  if (action) action.textContent = count ? `(${count})` : '';
-}
-
-function renderPendingReviews() {
-  updatePendingBadges();
-  const pending = getPendingReviews();
-  const total = pending.reduce((s, t) => s + parseFloat(t.amount || 0), 0);
-  const totalEl = document.getElementById('pending-total');
-  const countEl = document.getElementById('pending-count');
-  const listEl = document.getElementById('pending-list');
-  if (totalEl) totalEl.textContent = formatCurrency(total);
-  if (countEl) countEl.textContent = pending.length;
-  if (!listEl) return;
-
-  if (!pending.length) {
-    listEl.innerHTML = `
-      <div class="section-card empty-pending-card">
-        <div class="empty-icon">✅</div>
-        <div class="section-title">Nenhuma pendência</div>
-        <p class="settings-text">Tudo revisado. Quando você usar a tela rápida do iPhone, os lançamentos vão aparecer aqui.</p>
-        <button class="btn-add btn-quick" onclick="openQuickCapture()">⚡ Testar lançamento rápido</button>
-      </div>`;
-    return;
-  }
-
-  listEl.innerHTML = pending.map(t => {
-    const icon = paymentLabel(t.payment_method).includes('Cartão') ? '💳' : t.payment_method === 'pix' ? '💸' : '💵';
-    return `
-      <div class="section-card pending-review-row">
-        <div class="pending-review-main">
-          <div class="pending-review-icon">${icon}</div>
-          <div>
-            <div class="tx-description">${t.description}</div>
-            <div class="tx-meta">${formatDateBR(t.date)} · ${paymentLabel(t.payment_method)} · aguardando categoria/status</div>
-          </div>
-        </div>
-        <div class="pending-review-actions">
-          <strong class="negative">- ${formatCurrency(t.amount)}</strong>
-          <button class="btn-primary" onclick="openReviewTransaction('${t.id}')">Completar</button>
-          <button class="btn-secondary" onclick="markReviewDone('${t.id}')">OK rápido</button>
-          <button class="btn-icon" onclick="confirmDelete('transaction','${t.id}')">🗑️</button>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function openReviewTransaction(id) {
-  openEditTransaction(id);
-  setTimeout(() => {
-    const title = document.getElementById('tx-modal-title');
-    if (title) title.textContent = 'Completar pendência';
-  }, 50);
-}
-
-async function markReviewDone(id) {
-  const tx = allTransactions.find(t => t.id === id);
-  if (!tx) return;
-  const { error } = await db.from('transactions').update({
-    notes: cleanReviewNotes(tx.notes || ''),
-    status: tx.status === 'pending' ? 'paid' : tx.status
-  }).eq('id', id).eq('user_id', currentUser.id);
-  if (error) { showToast('Erro ao concluir pendência', 'error'); return; }
-  showToast('Pendência concluída!', 'success');
-  if (navigator.vibrate) navigator.vibrate(25);
-  await loadTransactions();
-  renderPendingReviews();
-}
-
-function openQuickCapture() {
-  window.open('quick.html', '_blank');
-}
-
-function showQuickShortcutGuide() {
-  const url = `${window.location.origin}/quick.html`;
-  alert(`Atalho rápido do iPhone:\n\n1. Abra esta tela no Safari:\n${url}\n\n2. Toque no botão compartilhar\n3. Toque em “Adicionar à Tela de Início”\n4. Dê o nome: Lançar Gasto\n\nDepois é só tocar nesse ícone, preencher valor + descrição + pagamento e confirmar. Ele aparece em Pendências no app principal.`);
-}
-
 // ============================================================
 // RELATÓRIOS
 // ============================================================
@@ -1700,6 +1412,8 @@ function showInstallGuide() {
 }
 
 function renderSettings() {
+  syncV5SettingsUI();
+  applyV5VisualOptions();
   const btn = document.getElementById('install-btn');
   if (btn) {
     btn.style.display = 'block';
@@ -1709,13 +1423,8 @@ function renderSettings() {
       btn.textContent = deferredInstallPrompt ? '📲 Instalar app' : '📲 Instalar / Ver dica';
     }
   }
-  const notifyEl = document.getElementById('notification-status');
-  if (notifyEl) notifyEl.textContent = ('Notification' in window) ? (Notification.permission === 'granted' ? 'Ativadas neste aparelho' : 'Desativadas') : 'Não suportado';
   const emailEl = document.getElementById('settings-email');
   if (emailEl && currentUser) emailEl.textContent = currentUser.email;
-  syncSettingsProfileUI();
-  updatePrivacyUI();
-  updatePendingBadges();
 }
 
 function exportData() {
@@ -1769,221 +1478,28 @@ async function clearTransactionsOnly() {
 }
 
 function openQuickAdd() {
-  openSmartQuickAdd();
-}
+  document.getElementById('tx-modal-title').textContent = 'Lançamento rápido';
+  document.getElementById('tx-id').value = '';
+  document.getElementById('tx-type').value = 'expense';
+  document.getElementById('tx-description').value = '';
+  document.getElementById('tx-amount').value = '';
+  document.getElementById('tx-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('tx-status').value = 'paid';
+  document.getElementById('tx-payment').value = 'money';
+  document.getElementById('tx-notes').value = '';
+  document.getElementById('tx-installments').value = '1';
+  document.getElementById('tx-card-group').style.display = 'none';
+  document.getElementById('tx-installments-group').style.display = 'none';
 
+  populateCategorySelect('expense');
+  openModal('tx-modal');
 
-// ============================================================
-// RENDERIZAÇÃO DA PÁGINA ATUAL
-// ============================================================
-function renderCurrentPage() {
-  switch (currentPage) {
-    case 'dashboard': renderDashboard(); break;
-    case 'transactions': renderTransactions(); break;
-    case 'bills': renderBills(); break;
-    case 'cards': renderCards(); break;
-    case 'categories': renderCategories(); break;
-    case 'budgets': renderBudgets(); break;
-    case 'reports': renderReports(); break;
-    case 'pending': renderPendingReviews(); break;
-    case 'calendar': renderCalendar(); break;
-    case 'settings': renderSettings(); break;
-  }
-}
-
-// ============================================================
-// V4 PREMIUM: PERFIL, PERSONALIZAÇÃO, PRIVACIDADE E CALENDÁRIO
-// ============================================================
-function prefsKey() {
-  return currentUser ? `finance_prefs_${currentUser.id}` : 'finance_prefs_guest';
-}
-
-function loadUserPreferences() {
-  try {
-    cachedUserPrefs = JSON.parse(localStorage.getItem(prefsKey()) || '{}');
-  } catch (_) {
-    cachedUserPrefs = {};
-  }
-  return cachedUserPrefs;
-}
-
-function saveUserPreferences(patch = {}) {
-  cachedUserPrefs = { ...(cachedUserPrefs || {}), ...patch };
-  localStorage.setItem(prefsKey(), JSON.stringify(cachedUserPrefs));
-  applyUserPreferences();
-}
-
-function applyUserPreferences() {
-  const prefs = cachedUserPrefs || loadUserPreferences();
-  const fallbackName = currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Usuário';
-  const name = prefs.displayName || fallbackName;
-  const avatar = prefs.avatarDataUrl || '';
-  const accent = prefs.accentColor || '#6366f1';
-
-  document.documentElement.style.setProperty('--primary', accent);
-  document.documentElement.style.setProperty('--primary-dark', shadeColor(accent, -18));
-  document.documentElement.style.setProperty('--primary-light', shadeColor(accent, 18));
-
-  const userName = document.getElementById('user-name');
-  if (userName) userName.textContent = name;
-  const avatarEl = document.getElementById('user-avatar');
-  if (avatarEl) renderAvatarElement(avatarEl, avatar, name);
-  const preview = document.getElementById('profile-avatar-preview');
-  if (preview) renderAvatarElement(preview, avatar, name);
-  const input = document.getElementById('profile-display-name');
-  if (input) input.value = prefs.displayName || '';
-
-  document.body.classList.toggle('privacy-mode', !!prefs.privacyMode);
-  document.body.classList.toggle('compact-mode', !!prefs.compactMode);
-  updatePrivacyUI();
-}
-
-function renderAvatarElement(el, avatar, name) {
-  if (!el) return;
-  if (avatar) {
-    el.innerHTML = `<img src="${avatar}" alt="Foto de perfil">`;
-  } else {
-    el.textContent = (name || 'U').trim().charAt(0).toUpperCase();
-  }
-}
-
-function syncSettingsProfileUI() {
-  loadUserPreferences();
-  applyUserPreferences();
-}
-
-function saveProfileName() {
-  const input = document.getElementById('profile-display-name');
-  const name = (input?.value || '').trim();
-  if (!name) { showToast('Digite um nome para salvar', 'error'); return; }
-  saveUserPreferences({ displayName: name });
-  showToast('Perfil atualizado!', 'success');
-}
-
-function handleProfilePhoto(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  if (!file.type.startsWith('image/')) { showToast('Escolha uma imagem válida', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const size = 320;
-      canvas.width = size; canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      const min = Math.min(img.width, img.height);
-      const sx = (img.width - min) / 2;
-      const sy = (img.height - min) / 2;
-      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
-      saveUserPreferences({ avatarDataUrl: canvas.toDataURL('image/jpeg', 0.82) });
-      showToast('Foto de perfil salva!', 'success');
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-  event.target.value = '';
-}
-
-function removeProfilePhoto() {
-  saveUserPreferences({ avatarDataUrl: '' });
-  showToast('Foto removida', 'success');
-}
-
-function setAccentColor(color) {
-  saveUserPreferences({ accentColor: color });
-  showToast('Cor atualizada!', 'success');
-}
-
-function resetPersonalization() {
-  saveUserPreferences({ accentColor: '#6366f1', compactMode: false });
-  showToast('Personalização restaurada', 'success');
-}
-
-function toggleCompactMode() {
-  const prefs = cachedUserPrefs || loadUserPreferences();
-  saveUserPreferences({ compactMode: !prefs.compactMode });
-  showToast(!prefs.compactMode ? 'Modo compacto ativado' : 'Modo compacto desativado', 'success');
-}
-
-function togglePrivacyMode() {
-  const prefs = cachedUserPrefs || loadUserPreferences();
-  saveUserPreferences({ privacyMode: !prefs.privacyMode });
-  updatePrivacyUI();
-  showToast(!prefs.privacyMode ? 'Valores escondidos' : 'Valores visíveis', 'success');
-}
-
-function updatePrivacyUI() {
-  const prefs = cachedUserPrefs || loadUserPreferences();
-  const active = !!prefs.privacyMode;
-  const status = document.getElementById('privacy-status');
-  const btn = document.getElementById('privacy-toggle-btn');
-  if (status) status.textContent = active ? 'Valores escondidos' : 'Valores visíveis';
-  if (btn) btn.textContent = active ? '👁️ Mostrar valores' : '🙈 Esconder valores';
-}
-
-function shadeColor(hex, percent) {
-  const f = parseInt(hex.slice(1), 16);
-  const t = percent < 0 ? 0 : 255;
-  const p = Math.abs(percent) / 100;
-  const R = f >> 16, G = f >> 8 & 0x00FF, B = f & 0x0000FF;
-  return '#' + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + (Math.round((t - G) * p) + G) * 0x100 + (Math.round((t - B) * p) + B)).toString(16).slice(1);
-}
-
-function renderCalendar() {
-  updateMonthLabel();
-  const grid = document.getElementById('calendar-grid');
-  const summary = document.getElementById('calendar-summary');
-  if (!grid || !summary) return;
-
-  const first = new Date(currentYear, currentMonth - 1, 1);
-  const days = new Date(currentYear, currentMonth, 0).getDate();
-  const startOffset = first.getDay();
-  const monthKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
-  const monthTxs = allTransactions.filter(t => monthKeyFromDate(t.date) === monthKey);
-  const income = monthTxs.filter(t => t.type === 'income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const expense = monthTxs.filter(t => t.type === 'expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const pending = monthTxs.filter(t => t.status !== 'paid').length;
-
-  summary.innerHTML = `
-    <div class="calendar-summary-card positive"><span>Receitas no mês</span><strong>${formatCurrency(income)}</strong></div>
-    <div class="calendar-summary-card negative"><span>Despesas no mês</span><strong>${formatCurrency(expense)}</strong></div>
-    <div class="calendar-summary-card"><span>Pendências</span><strong>${pending}</strong></div>
-  `;
-
-  const headers = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-  let html = headers.map(h => `<div class="calendar-weekday">${h}</div>`).join('');
-  for (let i = 0; i < startOffset; i++) html += '<div class="calendar-day empty"></div>';
-
-  const todayKey = new Date().toISOString().split('T')[0];
-  for (let day = 1; day <= days; day++) {
-    const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const txs = monthTxs.filter(t => t.date === dateStr);
-    const dayIncome = txs.filter(t => t.type === 'income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const dayExpense = txs.filter(t => t.type === 'expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const hasReview = txs.some(isReviewPending);
-    const isToday = dateStr === todayKey;
-    html += `<button class="calendar-day ${isToday ? 'today' : ''} ${txs.length ? 'has-items' : ''}" onclick="openCalendarDay('${dateStr}')">
-      <span class="calendar-day-number">${day}</span>
-      ${dayIncome ? `<small class="positive">+${formatCompactCurrency(dayIncome)}</small>` : ''}
-      ${dayExpense ? `<small class="negative">-${formatCompactCurrency(dayExpense)}</small>` : ''}
-      ${hasReview ? `<em>revisar</em>` : ''}
-    </button>`;
-  }
-  grid.innerHTML = html;
-}
-
-function formatCompactCurrency(value) {
-  const n = Math.abs(parseFloat(value || 0));
-  if (n >= 1000) return 'R$' + (n / 1000).toFixed(1).replace('.', ',') + 'k';
-  return 'R$' + n.toFixed(0);
-}
-
-function openCalendarDay(dateStr) {
-  currentMonth = parseInt(dateStr.slice(5,7));
-  currentYear = parseInt(dateStr.slice(0,4));
-  navigateTo('transactions');
-  showToast(`Mostrando lançamentos de ${formatDateBR(dateStr)}. Use a busca se quiser filtrar mais.`, 'success');
+  setTimeout(() => {
+    const desc = document.getElementById('tx-description');
+    const amount = document.getElementById('tx-amount');
+    if (desc) desc.placeholder = 'Ex: Café, mercado, gasolina...';
+    if (amount) amount.focus();
+  }, 200);
 }
 
 // ============================================================
@@ -2024,8 +1540,6 @@ function toggleTheme() {
   // Re-renderizar gráficos com nova cor
   if (currentPage === 'dashboard') renderDashboard();
   if (currentPage === 'reports') renderReports();
-  if (currentPage === 'calendar') renderCalendar();
-  if (currentPage === 'pending') renderPendingReviews();
 }
 
 function updateThemeIcon(theme) {
@@ -2099,3 +1613,40 @@ document.addEventListener('input', e => {
     e.target.value = v.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 });
+
+
+// ============================================================
+// V5 PREMIUM: segurança, pendências, inteligência e recorrências
+// ============================================================
+const V5_SECURITY_KEY = 'financeiro_v5_security';
+const V5_OPTIONS_KEY = 'financeiro_v5_options';
+const V5_RECURRING_KEY = 'financeiro_v5_recurring';
+function getV5Security(){return JSON.parse(localStorage.getItem(V5_SECURITY_KEY)||'{"pinEnabled":false,"pin":"","lockOnBlur":false,"biometric":false}');}
+function saveV5Security(c){localStorage.setItem(V5_SECURITY_KEY,JSON.stringify(c));}
+function getV5Options(){return JSON.parse(localStorage.getItem(V5_OPTIONS_KEY)||'{"smartCategories":true,"smartAlerts":true,"privacy":false,"compact":false}');}
+function saveV5Options(c){localStorage.setItem(V5_OPTIONS_KEY,JSON.stringify(c));}
+function initV5PremiumFeatures(){syncV5SettingsUI();applyV5VisualOptions();maybeShowLockOnOpen();maybeRunRecurringTransactions();setTimeout(()=>{if(getV5Options().smartAlerts)showSmartNudges();},1200);}
+function syncV5SettingsUI(){const s=getV5Security(),o=getV5Options();const set=(id,v)=>{const e=document.getElementById(id);if(e)e.checked=!!v};set('pin-enabled-toggle',s.pinEnabled);set('lock-blur-toggle',s.lockOnBlur);set('biometric-toggle',s.biometric);set('smart-cat-toggle',o.smartCategories);set('smart-alert-toggle',o.smartAlerts);set('privacy-toggle',o.privacy);set('compact-toggle',o.compact);}
+function setV5Option(k,v){const o=getV5Options();o[k]=v;saveV5Options(o);applyV5VisualOptions();showToast('Preferência salva!','success');}
+function setSecurityOption(k,v){const s=getV5Security();s[k]=v;saveV5Security(s);showToast('Segurança atualizada!','success');}
+function togglePinSecurity(enabled){const s=getV5Security();if(enabled&&!s.pin){const p=prompt('Crie um PIN de 4 dígitos:');if(!/^\d{4}$/.test(p||'')){showToast('PIN precisa ter 4 números','error');syncV5SettingsUI();return;}s.pin=p;}s.pinEnabled=enabled;saveV5Security(s);syncV5SettingsUI();showToast(enabled?'PIN ativado!':'PIN desativado!','success');}
+function setPinFlow(){const p=prompt('Digite o novo PIN de 4 dígitos:');if(!/^\d{4}$/.test(p||'')){showToast('PIN precisa ter 4 números','error');return;}const s=getV5Security();s.pin=p;s.pinEnabled=true;saveV5Security(s);syncV5SettingsUI();showToast('PIN salvo!','success');}
+function maybeShowLockOnOpen(){const s=getV5Security();if(s.pinEnabled&&s.pin)lockAppNow(false);}
+function lockAppNow(showMsg=true){const s=getV5Security();if(!s.pinEnabled||!s.pin){if(showMsg)showToast('Ative um PIN primeiro','error');return;}const m=document.getElementById('lock-modal-v5');if(m){m.classList.add('open');document.body.style.overflow='hidden';setTimeout(()=>document.getElementById('pin-input-v5')?.focus(),150);}}
+function unlockWithPin(){const s=getV5Security();const v=document.getElementById('pin-input-v5')?.value||'';if(v===s.pin){closeModal('lock-modal-v5');document.getElementById('pin-input-v5').value='';showToast('Desbloqueado!','success');}else showToast('PIN incorreto','error');}
+async function unlockWithBiometric(){const s=getV5Security();if(!s.biometric){showToast('Ative a biometria nas Configurações','error');return;}alert('No iPhone, sites usam biometria via WebAuthn com configuração avançada. Nesta versão, use o PIN como fallback seguro.');document.getElementById('pin-input-v5')?.focus();}
+document.addEventListener('visibilitychange',()=>{const s=getV5Security();if(document.hidden&&s.lockOnBlur&&s.pinEnabled)localStorage.setItem('financeiro_should_lock','1');if(!document.hidden&&localStorage.getItem('financeiro_should_lock')==='1'){localStorage.removeItem('financeiro_should_lock');lockAppNow(false);}});
+function togglePrivacyMode(v){const o=getV5Options();o.privacy=v;saveV5Options(o);applyV5VisualOptions();showToast('Modo privacidade atualizado!','success');}
+function toggleCompactMode(v){const o=getV5Options();o.compact=v;saveV5Options(o);applyV5VisualOptions();showToast('Modo compacto atualizado!','success');}
+function applyV5VisualOptions(){const o=getV5Options();document.body.classList.toggle('privacy-mode-v5',!!o.privacy);document.body.classList.toggle('compact-mode-v5',!!o.compact);}
+function smartSuggestCategoryId(description,type,currentCategoryId){if(currentCategoryId||!getV5Options().smartCategories)return currentCategoryId;const text=(description||'').toLowerCase();const rules=[['mercado|supermercado|atacad|carrefour',['Mercado','Alimentação']],['uber|99|taxi|gasolina|combustível|combustivel',['Transporte','Combustível']],['ifood|restaurante|lanche|pizza|almoço|almoco|janta|café|cafe',['Alimentação','Lazer']],['netflix|spotify|prime|assinatura|icloud',['Assinaturas']],['academia|gym|smart fit',['Academia','Saúde']],['farmacia|remedio|médico|medico|saúde|saude',['Saúde']],['salario|salário|pagamento|recebi',['Salário']]];for(const [pat,names] of rules){if(new RegExp(pat).test(text)){const c=allCategories.find(cat=>names.some(n=>cat.name?.toLowerCase().includes(n.toLowerCase()))&&(cat.type===type||cat.type==='both'));if(c)return c.id;}}return currentCategoryId;}
+function getPendingReviewTransactions(){return allTransactions.filter(t=>t.status==='pending'&&((t.notes||'').includes('[REVISAR]')||(t.description||'').includes('[REVISAR]')));}
+function renderPendingReview(){updateMonthLabel();const list=getPendingReviewTransactions().sort((a,b)=>b.date.localeCompare(a.date));const count=document.getElementById('pending-count-v5');if(count)count.textContent=list.length;const el=document.getElementById('pending-review-list');if(!el)return;if(!list.length){el.innerHTML=emptyState('Nenhuma pendência para revisar','✅');return;}el.innerHTML=list.map(t=>`<div class="pending-row-v5"><div class="tx-icon">⚡</div><div class="tx-info"><div class="tx-description">${(t.description||'').replace('[REVISAR]','').trim()}</div><div class="tx-meta">${formatDateBR(t.date)} · ${paymentLabel(t.payment_method)} · ${formatCurrency(t.amount)}</div></div><div class="pending-actions-v5"><button class="btn-add" onclick="openEditTransaction('${t.id}')">Completar</button><button class="btn-secondary" onclick="quickApprovePending('${t.id}')">OK rápido</button></div></div>`).join('');}
+async function quickApprovePending(id){const tx=allTransactions.find(t=>t.id===id);if(!tx)return;const clean=(tx.notes||'').replace('[REVISAR]','').trim();const {error}=await db.from('transactions').update({status:'paid',notes:clean}).eq('id',id).eq('user_id',currentUser.id);if(error){showToast('Erro ao confirmar pendência','error');return;}showToast('Pendência confirmada!','success');await loadTransactions();renderPendingReview();}
+function showSmartNudges(){const p=getPendingReviewTransactions().length;if(p)showToast(`Você tem ${p} pendência(s) para revisar ⚡`,'success');}
+function showSmartMonthlySummary(){const txs=allTransactions.filter(t=>{const d=new Date(t.date+'T00:00:00');return d.getMonth()+1===currentMonth&&d.getFullYear()===currentYear});const income=txs.filter(t=>t.type==='income'&&t.status==='paid').reduce((s,t)=>s+parseFloat(t.amount),0);const expenses=txs.filter(t=>t.type==='expense'&&t.status==='paid').reduce((s,t)=>s+parseFloat(t.amount),0);const committed=txs.filter(t=>t.type==='expense'&&t.status==='pending').reduce((s,t)=>s+parseFloat(t.amount),0);const projected=income-expenses-committed;alert(`Resumo inteligente do mês:\n\nReceitas pagas: ${formatCurrency(income)}\nDespesas pagas: ${formatCurrency(expenses)}\nDinheiro comprometido: ${formatCurrency(committed)}\nSaldo projetado após pendências: ${formatCurrency(projected)}\n\n${projected<0?'⚠️ Se tudo for pago, o mês pode fechar negativo.':'✅ Você ainda tem margem após as pendências.'}`);}
+function getRecurringItems(){return JSON.parse(localStorage.getItem(V5_RECURRING_KEY)||'[]');}function saveRecurringItems(i){localStorage.setItem(V5_RECURRING_KEY,JSON.stringify(i));}
+function addRecurringPrompt(){const description=prompt('Nome da recorrência (ex: Internet, Academia):');if(!description)return;const amount=parseCurrency(prompt('Valor mensal (ex: 99,90):')||'');if(!amount){showToast('Valor inválido','error');return;}const day=parseInt(prompt('Dia do mês para lançar (1 a 28):')||'1');if(day<1||day>28){showToast('Use um dia entre 1 e 28','error');return;}const payment_method=prompt('Forma de pagamento: pix, money, credit_card, boleto','pix')||'pix';const items=getRecurringItems();items.push({id:crypto.randomUUID(),description,amount,day,payment_method,lastKey:''});saveRecurringItems(items);showToast('Recorrência criada!','success');}
+function manageRecurringPrompt(){const items=getRecurringItems();if(!items.length){alert('Nenhuma recorrência criada.');return;}const text=items.map((r,i)=>`${i+1}. ${r.description} - ${formatCurrency(r.amount)} todo dia ${r.day}`).join('\n');const del=prompt(`Recorrências:\n\n${text}\n\nDigite o número para apagar ou deixe vazio para fechar:`);const idx=parseInt(del||'0')-1;if(idx>=0&&items[idx]){items.splice(idx,1);saveRecurringItems(items);showToast('Recorrência apagada!','success');}}
+async function maybeRunRecurringTransactions(){const items=getRecurringItems();if(!items.length||!currentUser)return;const key=`${currentYear}-${String(currentMonth).padStart(2,'0')}`;const rows=[];items.forEach(r=>{if(r.lastKey===key)return;const d=new Date(currentYear,currentMonth-1,Math.min(28,r.day));rows.push({user_id:currentUser.id,type:'expense',description:r.description,amount:r.amount,date:d.toISOString().split('T')[0],category_id:null,status:'pending',payment_method:r.payment_method||'pix',notes:'[RECORRENTE] gerado automaticamente'});r.lastKey=key;});if(!rows.length)return;const {error}=await db.from('transactions').insert(rows);if(!error){saveRecurringItems(items);await loadTransactions();showToast(`${rows.length} recorrência(s) lançada(s) para este mês`,'success');}}
+setTimeout(()=>{const p=document.getElementById('pin-input-v5');if(p)p.addEventListener('keydown',e=>{if(e.key==='Enter')unlockWithPin();});},500);
