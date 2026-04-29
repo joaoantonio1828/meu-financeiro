@@ -482,11 +482,29 @@ catch(e){}
             <button class="btn-add btn-quick full-width" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
           </div>
 
-          <div class="section-card">
+          <div class="section-card appearance-card-v10">
             <div class="settings-card-icon">🎨</div>
-            <div class="section-title">Aparência</div>
-            <p class="settings-text">Alterne entre modo claro e escuro. A escolha fica salva neste aparelho.</p>
+            <div class="section-title">Aparência iOS Glass</div>
+            <p class="settings-text">Escolha a cor principal do app e alterne entre modo claro/escuro. Tudo fica salvo neste aparelho.</p>
             <button class="btn-add full-width" onclick="toggleTheme()">🌙 Alternar tema</button>
+
+            <div class="color-picker-row-v10">
+              <label class="form-label">Cor personalizada</label>
+              <input type="color" id="app-color-picker" class="ios-color-input" value="#0a84ff" onchange="setAppAccentColor(this.value)">
+            </div>
+
+            <div class="palette-title-v10">Paletas rápidas</div>
+            <div class="color-palette-v10">
+              <button type="button" class="color-dot-v10" style="--c:#0a84ff" onclick="setAppAccentColor('#0a84ff')" title="Azul iOS"></button>
+              <button type="button" class="color-dot-v10" style="--c:#5856d6" onclick="setAppAccentColor('#5856d6')" title="Roxo"></button>
+              <button type="button" class="color-dot-v10" style="--c:#34c759" onclick="setAppAccentColor('#34c759')" title="Verde"></button>
+              <button type="button" class="color-dot-v10" style="--c:#ff9500" onclick="setAppAccentColor('#ff9500')" title="Laranja"></button>
+              <button type="button" class="color-dot-v10" style="--c:#ff2d55" onclick="setAppAccentColor('#ff2d55')" title="Rosa"></button>
+              <button type="button" class="color-dot-v10" style="--c:#30d5c8" onclick="setAppAccentColor('#30d5c8')" title="Turquesa"></button>
+              <button type="button" class="color-dot-v10" style="--c:#8e8e93" onclick="setAppAccentColor('#8e8e93')" title="Titânio"></button>
+            </div>
+
+            <button class="btn-secondary full-width" onclick="resetAppAppearance()">↩️ Restaurar visual padrão</button>
           </div>
 
           <div class="section-card">

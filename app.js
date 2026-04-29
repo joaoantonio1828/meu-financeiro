@@ -1434,6 +1434,7 @@ function showInstallGuide() {
 }
 
 function renderSettings() {
+  if (typeof initV10Appearance === 'function') initV10Appearance();
   syncV5SettingsUI();
   applyV5VisualOptions();
   const btn = document.getElementById('install-btn');
@@ -1720,3 +1721,54 @@ function lockAppNow(){resetV5SecurityLocal(false);if(typeof showToast==='functio
 function unlockWithPin(){resetV5SecurityLocal(true)}
 async function unlockWithBiometric(){resetV5SecurityLocal(false);if(typeof showToast==='function')showToast('Face ID desativado temporariamente.','success')}
 window.addEventListener('DOMContentLoaded',()=>{resetV5SecurityLocal(false);setInterval(()=>resetV5SecurityLocal(false),500)});
+
+// ============================================================
+// V10 - APARÊNCIA iOS GLASS + CORES PERSONALIZÁVEIS
+// ============================================================
+const V10_DEFAULT_ACCENT = '#0a84ff';
+
+function hexToRgbV10(hex) {
+  const clean = String(hex || V10_DEFAULT_ACCENT).replace('#', '').trim();
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  const num = parseInt(full, 16);
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255
+  };
+}
+
+function applyAppAccentColor(color) {
+  const safe = /^#[0-9A-F]{6}$/i.test(color || '') ? color : V10_DEFAULT_ACCENT;
+  const rgb = hexToRgbV10(safe);
+  document.documentElement.style.setProperty('--primary', safe);
+  document.documentElement.style.setProperty('--primary-light', safe);
+  document.documentElement.style.setProperty('--primary-dark', safe);
+  document.documentElement.style.setProperty('--accent-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+
+  const picker = document.getElementById('app-color-picker');
+  if (picker) picker.value = safe;
+}
+
+function setAppAccentColor(color) {
+  applyAppAccentColor(color);
+  localStorage.setItem('financeiro_accent_color', color);
+  showToast('Cor do app atualizada!', 'success');
+  if (currentPage === 'dashboard') renderDashboard();
+  if (currentPage === 'reports') renderReports();
+}
+
+function resetAppAppearance() {
+  localStorage.removeItem('financeiro_accent_color');
+  applyAppAccentColor(V10_DEFAULT_ACCENT);
+  showToast('Visual padrão restaurado!', 'success');
+}
+
+function initV10Appearance() {
+  const saved = localStorage.getItem('financeiro_accent_color') || V10_DEFAULT_ACCENT;
+  applyAppAccentColor(saved);
+}
+
+// Inicializa cedo e também quando a página já estiver pronta.
+try { initV10Appearance(); } catch(e) {}
+document.addEventListener('DOMContentLoaded', initV10Appearance);
