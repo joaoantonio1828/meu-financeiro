@@ -17,6 +17,15 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+// Emergência anti-trava: remove PIN/bloqueio local antes do app carregar.
+try {
+  localStorage.removeItem('financeiro_v5_security');
+  localStorage.removeItem('financeiro_should_lock');
+  sessionStorage.removeItem('financeiro_should_lock');
+}
+catch(e){}
+</script>
 </head>
 <body>
 
