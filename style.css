@@ -1453,3 +1453,6 @@ button, .nav-item, .bottom-nav-item, .tx-row, .category-row, .budget-row, .goal-
     scroll-behavior: auto !important;
   }
 }
+
+/* V9: trava de PIN desativada */
+#lock-modal-v5{display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important;}
