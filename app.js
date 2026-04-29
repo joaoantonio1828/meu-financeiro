@@ -38,6 +38,12 @@ let installTipShown = false;
 // INICIALIZAÇÃO
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+  // Correção anti-trava: permite limpar somente a segurança local pelo link ?reset=1
+  // Isso não apaga dados do Supabase, lançamentos, cartões ou categorias.
+  if (new URLSearchParams(window.location.search).has('reset')) {
+    resetV5SecurityLocal(false);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
   initTheme();
   await checkAuth();
 });
@@ -76,6 +82,7 @@ async function showApp() {
   await loadAllData();
   initPWAExperience();
   navigateTo('dashboard');
+  if (typeof initV5PremiumFeatures === 'function') initV5PremiumFeatures();
 }
 
 // ============================================================
@@ -1621,21 +1628,91 @@ document.addEventListener('input', e => {
 const V5_SECURITY_KEY = 'financeiro_v5_security';
 const V5_OPTIONS_KEY = 'financeiro_v5_options';
 const V5_RECURRING_KEY = 'financeiro_v5_recurring';
-function getV5Security(){return JSON.parse(localStorage.getItem(V5_SECURITY_KEY)||'{"pinEnabled":false,"pin":"","lockOnBlur":false,"biometric":false}');}
+function isValidV5Pin(pin){return /^\d{4}$/.test(String(pin||''));}
+function resetV5SecurityLocal(showMessage=true){
+  localStorage.removeItem('financeiro_v5_security');
+  localStorage.removeItem('financeiro_should_lock');
+  const modal=document.getElementById('lock-modal-v5');
+  if(modal) modal.classList.remove('open');
+  document.body.style.overflow='';
+  if(showMessage && typeof showToast==='function') showToast('Bloqueio local resetado. Crie um PIN novo nas Configurações.','success');
+}
+function getV5Security(){
+  let s={pinEnabled:false,pin:'',lockOnBlur:false,biometric:false};
+  try{s={...s,...JSON.parse(localStorage.getItem(V5_SECURITY_KEY)||'{}')};}catch(e){resetV5SecurityLocal(false);return s;}
+  // Segurança anti-trava: se não tiver PIN válido, nunca bloqueia o app.
+  if(!isValidV5Pin(s.pin)){
+    s.pinEnabled=false;
+    s.pin='';
+    s.lockOnBlur=false;
+    s.biometric=false;
+    localStorage.setItem(V5_SECURITY_KEY,JSON.stringify(s));
+  }
+  return s;
+}
 function saveV5Security(c){localStorage.setItem(V5_SECURITY_KEY,JSON.stringify(c));}
 function getV5Options(){return JSON.parse(localStorage.getItem(V5_OPTIONS_KEY)||'{"smartCategories":true,"smartAlerts":true,"privacy":false,"compact":false}');}
 function saveV5Options(c){localStorage.setItem(V5_OPTIONS_KEY,JSON.stringify(c));}
 function initV5PremiumFeatures(){syncV5SettingsUI();applyV5VisualOptions();maybeShowLockOnOpen();maybeRunRecurringTransactions();setTimeout(()=>{if(getV5Options().smartAlerts)showSmartNudges();},1200);}
 function syncV5SettingsUI(){const s=getV5Security(),o=getV5Options();const set=(id,v)=>{const e=document.getElementById(id);if(e)e.checked=!!v};set('pin-enabled-toggle',s.pinEnabled);set('lock-blur-toggle',s.lockOnBlur);set('biometric-toggle',s.biometric);set('smart-cat-toggle',o.smartCategories);set('smart-alert-toggle',o.smartAlerts);set('privacy-toggle',o.privacy);set('compact-toggle',o.compact);}
 function setV5Option(k,v){const o=getV5Options();o[k]=v;saveV5Options(o);applyV5VisualOptions();showToast('Preferência salva!','success');}
-function setSecurityOption(k,v){const s=getV5Security();s[k]=v;saveV5Security(s);showToast('Segurança atualizada!','success');}
-function togglePinSecurity(enabled){const s=getV5Security();if(enabled&&!s.pin){const p=prompt('Crie um PIN de 4 dígitos:');if(!/^\d{4}$/.test(p||'')){showToast('PIN precisa ter 4 números','error');syncV5SettingsUI();return;}s.pin=p;}s.pinEnabled=enabled;saveV5Security(s);syncV5SettingsUI();showToast(enabled?'PIN ativado!':'PIN desativado!','success');}
-function setPinFlow(){const p=prompt('Digite o novo PIN de 4 dígitos:');if(!/^\d{4}$/.test(p||'')){showToast('PIN precisa ter 4 números','error');return;}const s=getV5Security();s.pin=p;s.pinEnabled=true;saveV5Security(s);syncV5SettingsUI();showToast('PIN salvo!','success');}
-function maybeShowLockOnOpen(){const s=getV5Security();if(s.pinEnabled&&s.pin)lockAppNow(false);}
-function lockAppNow(showMsg=true){const s=getV5Security();if(!s.pinEnabled||!s.pin){if(showMsg)showToast('Ative um PIN primeiro','error');return;}const m=document.getElementById('lock-modal-v5');if(m){m.classList.add('open');document.body.style.overflow='hidden';setTimeout(()=>document.getElementById('pin-input-v5')?.focus(),150);}}
-function unlockWithPin(){const s=getV5Security();const v=document.getElementById('pin-input-v5')?.value||'';if(v===s.pin){closeModal('lock-modal-v5');document.getElementById('pin-input-v5').value='';showToast('Desbloqueado!','success');}else showToast('PIN incorreto','error');}
-async function unlockWithBiometric(){const s=getV5Security();if(!s.biometric){showToast('Ative a biometria nas Configurações','error');return;}alert('No iPhone, sites usam biometria via WebAuthn com configuração avançada. Nesta versão, use o PIN como fallback seguro.');document.getElementById('pin-input-v5')?.focus();}
-document.addEventListener('visibilitychange',()=>{const s=getV5Security();if(document.hidden&&s.lockOnBlur&&s.pinEnabled)localStorage.setItem('financeiro_should_lock','1');if(!document.hidden&&localStorage.getItem('financeiro_should_lock')==='1'){localStorage.removeItem('financeiro_should_lock');lockAppNow(false);}});
+function setSecurityOption(k,v){
+  const s=getV5Security();
+  if((k==='lockOnBlur'||k==='biometric') && v && !isValidV5Pin(s.pin)){
+    showToast('Crie um PIN de 4 dígitos primeiro','error');
+    syncV5SettingsUI();
+    return;
+  }
+  s[k]=v;
+  saveV5Security(s);
+  syncV5SettingsUI();
+  showToast('Segurança atualizada!','success');
+}
+function togglePinSecurity(enabled){
+  const s=getV5Security();
+  if(enabled && !isValidV5Pin(s.pin)){
+    const p=prompt('Crie um PIN de 4 dígitos:');
+    if(!isValidV5Pin(p)){
+      showToast('PIN precisa ter 4 números','error');
+      s.pinEnabled=false; s.pin=''; s.lockOnBlur=false; s.biometric=false;
+      saveV5Security(s); syncV5SettingsUI();
+      return;
+    }
+    s.pin=p;
+  }
+  s.pinEnabled=!!enabled && isValidV5Pin(s.pin);
+  if(!s.pinEnabled){s.lockOnBlur=false;s.biometric=false;}
+  saveV5Security(s);syncV5SettingsUI();showToast(s.pinEnabled?'PIN ativado!':'PIN desativado!','success');
+}
+function setPinFlow(){
+  const p=prompt('Digite o novo PIN de 4 dígitos:');
+  if(!isValidV5Pin(p)){showToast('PIN precisa ter 4 números','error');return;}
+  const s=getV5Security();s.pin=p;s.pinEnabled=true;saveV5Security(s);syncV5SettingsUI();showToast('PIN salvo!','success');
+}
+function maybeShowLockOnOpen(){const s=getV5Security();if(s.pinEnabled&&isValidV5Pin(s.pin))lockAppNow(false);}
+function lockAppNow(showMsg=true){
+  const s=getV5Security();
+  if(!s.pinEnabled||!isValidV5Pin(s.pin)){
+    resetV5SecurityLocal(false);
+    if(showMsg)showToast('Crie um PIN primeiro nas Configurações','error');
+    return;
+  }
+  const m=document.getElementById('lock-modal-v5');
+  if(m){m.classList.add('open');document.body.style.overflow='hidden';setTimeout(()=>document.getElementById('pin-input-v5')?.focus(),150);}
+}
+function unlockWithPin(){
+  const s=getV5Security();
+  if(!s.pinEnabled||!isValidV5Pin(s.pin)){resetV5SecurityLocal(true);return;}
+  const v=document.getElementById('pin-input-v5')?.value||'';
+  if(v===s.pin){closeModal('lock-modal-v5');document.getElementById('pin-input-v5').value='';showToast('Desbloqueado!','success');}
+  else showToast('PIN incorreto','error');
+}
+async function unlockWithBiometric(){
+  const s=getV5Security();
+  if(!s.biometric||!isValidV5Pin(s.pin)){showToast('Use o PIN ou configure a biometria depois','error');return;}
+  alert('No navegador, a biometria real exige WebAuthn avançado. Use o PIN como desbloqueio seguro.');document.getElementById('pin-input-v5')?.focus();
+}
+document.addEventListener('visibilitychange',()=>{const s=getV5Security();if(document.hidden&&s.lockOnBlur&&s.pinEnabled&&isValidV5Pin(s.pin))localStorage.setItem('financeiro_should_lock','1');if(!document.hidden&&localStorage.getItem('financeiro_should_lock')==='1'){localStorage.removeItem('financeiro_should_lock');lockAppNow(false);}});
 function togglePrivacyMode(v){const o=getV5Options();o.privacy=v;saveV5Options(o);applyV5VisualOptions();showToast('Modo privacidade atualizado!','success');}
 function toggleCompactMode(v){const o=getV5Options();o.compact=v;saveV5Options(o);applyV5VisualOptions();showToast('Modo compacto atualizado!','success');}
 function applyV5VisualOptions(){const o=getV5Options();document.body.classList.toggle('privacy-mode-v5',!!o.privacy);document.body.classList.toggle('compact-mode-v5',!!o.compact);}
