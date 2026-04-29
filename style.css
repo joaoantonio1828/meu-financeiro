@@ -614,7 +614,7 @@ select.form-input { appearance: none; background-image: url("data:image/svg+xml,
 /* ============================================================
    MODALS
    ============================================================ */
-.modal-overlay {
+.modal-overlay { display: none;
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,.45);
@@ -628,7 +628,7 @@ select.form-input { appearance: none; background-image: url("data:image/svg+xml,
   backdrop-filter: blur(2px);
 }
 
-.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-overlay.open { display: flex; opacity: 1; pointer-events: all; }
 
 .modal {
   background: var(--surface);
@@ -1280,7 +1280,7 @@ button, .nav-item, .bottom-nav-item, .tx-row, .category-row, .budget-row, .goal-
 .card-progress-bar { height: 8px !important; border-radius: 999px !important; background: rgba(255,255,255,.26) !important; }
 .card-progress-fill { border-radius: 999px !important; }
 
-.modal-overlay {
+.modal-overlay { display: none;
   backdrop-filter: blur(18px) saturate(160%);
   -webkit-backdrop-filter: blur(18px) saturate(160%);
   animation: iosFadeIn .18s ease both;
@@ -1442,7 +1442,7 @@ button, .nav-item, .bottom-nav-item, .tx-row, .category-row, .budget-row, .goal-
   .card-value { font-size: 20px !important; }
   .section-card, .chart-wrap, .report-stat, .bills-summary { border-radius: 26px !important; padding: 16px !important; }
   .modal { border-radius: 30px 30px 0 0 !important; max-height: 92vh; margin-top: auto; }
-  .modal-overlay { align-items: flex-end !important; }
+  .modal-overlay { display: none; align-items: flex-end !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

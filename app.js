@@ -1,3 +1,11 @@
+
+document.addEventListener('DOMContentLoaded',()=>{
+ document.querySelectorAll('.modal-overlay').forEach(m=>{
+  m.classList.remove('open');
+  m.style.display='none';
+ });
+});
+
 // ============================================================
 // CONTROLE FINANCEIRO PREMIUM - app.js
 // ============================================================
