@@ -482,29 +482,38 @@ catch(e){}
             <button class="btn-add btn-quick full-width" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
           </div>
 
-          <div class="section-card appearance-card-v10">
+          <div class="section-card appearance-card-v11">
             <div class="settings-card-icon">🎨</div>
-            <div class="section-title">Aparência iOS Glass</div>
-            <p class="settings-text">Escolha a cor principal do app e alterne entre modo claro/escuro. Tudo fica salvo neste aparelho.</p>
-            <button class="btn-add full-width" onclick="toggleTheme()">🌙 Alternar tema</button>
+            <div class="section-title">Aparência</div>
+            <p class="settings-text">Escolha o visual do app, cor principal e modo claro/escuro. Tudo fica salvo neste aparelho.</p>
 
-            <div class="color-picker-row-v10">
-              <label class="form-label">Cor personalizada</label>
-              <input type="color" id="app-color-picker" class="ios-color-input" value="#0a84ff" onchange="setAppAccentColor(this.value)">
+            <div class="visual-style-grid">
+              <button type="button" class="visual-style-option" id="ui-style-ios" onclick="setUIStyle('ios-glass')">
+                <span class="visual-preview ios-preview"></span>
+                <strong>iOS Glass</strong>
+                <small>Claro, limpo e transparente</small>
+              </button>
+              <button type="button" class="visual-style-option" id="ui-style-cyano" onclick="setUIStyle('cyano-dark')">
+                <span class="visual-preview cyano-preview"></span>
+                <strong>Cyano Dark</strong>
+                <small>Fintech escuro com vidro</small>
+              </button>
             </div>
 
-            <div class="palette-title-v10">Paletas rápidas</div>
-            <div class="color-palette-v10">
-              <button type="button" class="color-dot-v10" style="--c:#0a84ff" onclick="setAppAccentColor('#0a84ff')" title="Azul iOS"></button>
-              <button type="button" class="color-dot-v10" style="--c:#5856d6" onclick="setAppAccentColor('#5856d6')" title="Roxo"></button>
-              <button type="button" class="color-dot-v10" style="--c:#34c759" onclick="setAppAccentColor('#34c759')" title="Verde"></button>
-              <button type="button" class="color-dot-v10" style="--c:#ff9500" onclick="setAppAccentColor('#ff9500')" title="Laranja"></button>
-              <button type="button" class="color-dot-v10" style="--c:#ff2d55" onclick="setAppAccentColor('#ff2d55')" title="Rosa"></button>
-              <button type="button" class="color-dot-v10" style="--c:#30d5c8" onclick="setAppAccentColor('#30d5c8')" title="Turquesa"></button>
-              <button type="button" class="color-dot-v10" style="--c:#8e8e93" onclick="setAppAccentColor('#8e8e93')" title="Titânio"></button>
+            <div class="color-palette-v11">
+              <button type="button" class="color-dot" style="--dot:#007aff" onclick="setAccentColor('#007aff')" aria-label="Azul"></button>
+              <button type="button" class="color-dot" style="--dot:#06b6d4" onclick="setAccentColor('#06b6d4')" aria-label="Cyano"></button>
+              <button type="button" class="color-dot" style="--dot:#8b5cf6" onclick="setAccentColor('#8b5cf6')" aria-label="Roxo"></button>
+              <button type="button" class="color-dot" style="--dot:#10b981" onclick="setAccentColor('#10b981')" aria-label="Verde"></button>
+              <button type="button" class="color-dot" style="--dot:#f97316" onclick="setAccentColor('#f97316')" aria-label="Laranja"></button>
+              <button type="button" class="color-dot" style="--dot:#ec4899" onclick="setAccentColor('#ec4899')" aria-label="Rosa"></button>
+              <label class="custom-color-v11">Personalizada <input type="color" id="custom-accent-color" onchange="setAccentColor(this.value)"></label>
             </div>
 
-            <button class="btn-secondary full-width" onclick="resetAppAppearance()">↩️ Restaurar visual padrão</button>
+            <div class="settings-actions-row-v11">
+              <button class="btn-add" onclick="toggleTheme()">🌙 Alternar claro/escuro</button>
+              <button class="btn-secondary" onclick="resetAppearanceV11()">↩️ Restaurar padrão</button>
+            </div>
           </div>
 
           <div class="section-card">

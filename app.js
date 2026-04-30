@@ -1434,7 +1434,6 @@ function showInstallGuide() {
 }
 
 function renderSettings() {
-  if (typeof initV10Appearance === 'function') initV10Appearance();
   syncV5SettingsUI();
   applyV5VisualOptions();
   const btn = document.getElementById('install-btn');
@@ -1448,6 +1447,7 @@ function renderSettings() {
   }
   const emailEl = document.getElementById('settings-email');
   if (emailEl && currentUser) emailEl.textContent = currentUser.email;
+  syncAppearanceControlsV11();
 }
 
 function exportData() {
@@ -1722,53 +1722,87 @@ function unlockWithPin(){resetV5SecurityLocal(true)}
 async function unlockWithBiometric(){resetV5SecurityLocal(false);if(typeof showToast==='function')showToast('Face ID desativado temporariamente.','success')}
 window.addEventListener('DOMContentLoaded',()=>{resetV5SecurityLocal(false);setInterval(()=>resetV5SecurityLocal(false),500)});
 
+
 // ============================================================
-// V10 - APARÊNCIA iOS GLASS + CORES PERSONALIZÁVEIS
+// V11 - APARÊNCIA: iOS GLASS + CYANO DARK + CORES
 // ============================================================
-const V10_DEFAULT_ACCENT = '#0a84ff';
+const APPEARANCE_V11_KEY = 'financeiro_appearance_v11';
+const DEFAULT_APPEARANCE_V11 = { uiStyle: 'ios-glass', accent: '#007aff' };
 
-function hexToRgbV10(hex) {
-  const clean = String(hex || V10_DEFAULT_ACCENT).replace('#', '').trim();
-  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
-  const num = parseInt(full, 16);
-  return {
-    r: (num >> 16) & 255,
-    g: (num >> 8) & 255,
-    b: num & 255
-  };
+function getAppearanceV11() {
+  try {
+    return { ...DEFAULT_APPEARANCE_V11, ...(JSON.parse(localStorage.getItem(APPEARANCE_V11_KEY) || '{}')) };
+  } catch (e) {
+    return { ...DEFAULT_APPEARANCE_V11 };
+  }
 }
 
-function applyAppAccentColor(color) {
-  const safe = /^#[0-9A-F]{6}$/i.test(color || '') ? color : V10_DEFAULT_ACCENT;
-  const rgb = hexToRgbV10(safe);
-  document.documentElement.style.setProperty('--primary', safe);
-  document.documentElement.style.setProperty('--primary-light', safe);
-  document.documentElement.style.setProperty('--primary-dark', safe);
-  document.documentElement.style.setProperty('--accent-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
-
-  const picker = document.getElementById('app-color-picker');
-  if (picker) picker.value = safe;
+function saveAppearanceV11(settings) {
+  localStorage.setItem(APPEARANCE_V11_KEY, JSON.stringify({ ...getAppearanceV11(), ...settings }));
 }
 
-function setAppAccentColor(color) {
-  applyAppAccentColor(color);
-  localStorage.setItem('financeiro_accent_color', color);
-  showToast('Cor do app atualizada!', 'success');
-  if (currentPage === 'dashboard') renderDashboard();
-  if (currentPage === 'reports') renderReports();
+function applyAppearanceV11() {
+  const settings = getAppearanceV11();
+  document.body.classList.remove('ios-glass', 'cyano-dark');
+  document.body.classList.add(settings.uiStyle || 'ios-glass');
+  document.documentElement.style.setProperty('--primary', settings.accent || '#007aff');
+  document.documentElement.style.setProperty('--primary-light', lightenHex(settings.accent || '#007aff', 18));
+  document.documentElement.style.setProperty('--primary-dark', darkenHex(settings.accent || '#007aff', 14));
+  syncAppearanceControlsV11();
 }
 
-function resetAppAppearance() {
-  localStorage.removeItem('financeiro_accent_color');
-  applyAppAccentColor(V10_DEFAULT_ACCENT);
-  showToast('Visual padrão restaurado!', 'success');
+function setUIStyle(style) {
+  saveAppearanceV11({ uiStyle: style });
+  applyAppearanceV11();
+  showToast(style === 'cyano-dark' ? 'Visual Cyano Dark ativado!' : 'Visual iOS Glass ativado!', 'success');
 }
 
-function initV10Appearance() {
-  const saved = localStorage.getItem('financeiro_accent_color') || V10_DEFAULT_ACCENT;
-  applyAppAccentColor(saved);
+function setAccentColor(color) {
+  saveAppearanceV11({ accent: color });
+  applyAppearanceV11();
+  showToast('Cor atualizada!', 'success');
 }
 
-// Inicializa cedo e também quando a página já estiver pronta.
-try { initV10Appearance(); } catch(e) {}
-document.addEventListener('DOMContentLoaded', initV10Appearance);
+function resetAppearanceV11() {
+  localStorage.setItem(APPEARANCE_V11_KEY, JSON.stringify(DEFAULT_APPEARANCE_V11));
+  applyAppearanceV11();
+  showToast('Aparência restaurada!', 'success');
+}
+
+function syncAppearanceControlsV11() {
+  const settings = getAppearanceV11();
+  const ios = document.getElementById('ui-style-ios');
+  const cyano = document.getElementById('ui-style-cyano');
+  if (ios) ios.classList.toggle('active', settings.uiStyle === 'ios-glass');
+  if (cyano) cyano.classList.toggle('active', settings.uiStyle === 'cyano-dark');
+  const picker = document.getElementById('custom-accent-color');
+  if (picker) picker.value = settings.accent || '#007aff';
+}
+
+function lightenHex(hex, percent) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#5aa9ff';
+  const mix = (c) => Math.round(c + (255 - c) * percent / 100);
+  return rgbToHex(mix(rgb.r), mix(rgb.g), mix(rgb.b));
+}
+
+function darkenHex(hex, percent) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#0051d5';
+  const mix = (c) => Math.round(c * (1 - percent / 100));
+  return rgbToHex(mix(rgb.r), mix(rgb.g), mix(rgb.b));
+}
+
+function hexToRgb(hex) {
+  const clean = String(hex || '').replace('#','');
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return null;
+  return { r: parseInt(clean.slice(0,2),16), g: parseInt(clean.slice(2,4),16), b: parseInt(clean.slice(4,6),16) };
+}
+
+function rgbToHex(r,g,b) {
+  return '#' + [r,g,b].map(x => Math.max(0, Math.min(255, x)).toString(16).padStart(2,'0')).join('');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  requestAnimationFrame(applyAppearanceV11);
+});
