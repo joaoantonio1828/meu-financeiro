@@ -141,6 +141,15 @@ catch(e){}
       <div class="nav-item" data-page="reports" onclick="navigateTo('reports')">
         <span class="nav-icon">📊</span> Relatórios
       </div>
+      <div class="nav-item" data-page="calendar" onclick="navigateTo('calendar')">
+        <span class="nav-icon">🗓️</span> Calendário
+      </div>
+      <div class="nav-item" data-page="insights" onclick="navigateTo('insights')">
+        <span class="nav-icon">🧠</span> Insights
+      </div>
+      <div class="nav-item" data-page="recurring" onclick="navigateTo('recurring')">
+        <span class="nav-icon">🔁</span> Recorrências
+      </div>
       <div class="nav-item" data-page="settings" onclick="navigateTo('settings')">
         <span class="nav-icon">⚙️</span> Configurações
       </div>
@@ -594,31 +603,25 @@ catch(e){}
   </div><!-- /main-content -->
 
   <!-- FAB mobile -->
-  <button class="fab" onclick="openQuickAdd()" aria-label="Lançamento rápido">⚡</button>
+  <button class="fab" onclick="openQuickAdd()" aria-label="Lançamento rápido">+</button>
 
   <!-- BOTTOM NAV -->
-  <nav class="bottom-nav">
+  <nav class="bottom-nav bottom-nav-v12">
     <div class="bottom-nav-items">
       <div class="bottom-nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">
-        <span class="bottom-nav-icon">🏠</span><span>Início</span>
+        <span class="bottom-nav-icon bn-home"></span><span>Início</span>
       </div>
       <div class="bottom-nav-item" data-page="transactions" onclick="navigateTo('transactions')">
-        <span class="bottom-nav-icon">💸</span><span>Lançamentos</span>
+        <span class="bottom-nav-icon bn-list"></span><span>Lançar</span>
       </div>
       <div class="bottom-nav-item" data-page="pending-review" onclick="navigateTo('pending-review')">
-        <span class="bottom-nav-icon">⚡</span><span>Pendências</span>
-      </div>
-      <div class="bottom-nav-item" data-page="bills" onclick="navigateTo('bills')">
-        <span class="bottom-nav-icon">📅</span><span>Contas</span>
+        <span class="bottom-nav-icon bn-pending"></span><span>Pendências</span>
       </div>
       <div class="bottom-nav-item" data-page="cards" onclick="navigateTo('cards')">
-        <span class="bottom-nav-icon">💳</span><span>Cartões</span>
+        <span class="bottom-nav-icon bn-card"></span><span>Cartões</span>
       </div>
-      <div class="bottom-nav-item" data-page="reports" onclick="navigateTo('reports')">
-        <span class="bottom-nav-icon">📊</span><span>Relatórios</span>
-      </div>
-      <div class="bottom-nav-item" data-page="settings" onclick="navigateTo('settings')">
-        <span class="bottom-nav-icon">⚙️</span><span>Ajustes</span>
+      <div class="bottom-nav-item" data-page="more" onclick="toggleSidebar()">
+        <span class="bottom-nav-icon bn-more"></span><span>Mais</span>
       </div>
     </div>
   </nav>

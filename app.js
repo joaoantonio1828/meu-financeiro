@@ -206,7 +206,7 @@ function navigateTo(page) {
   const titleMap = {
     dashboard: 'Dashboard', transactions: 'Lançamentos', bills: 'Contas a Pagar',
     cards: 'Cartões', categories: 'Categorias', budgets: 'Metas e Orçamentos',
-    reports: 'Relatórios', settings: 'Configurações'
+    reports: 'Relatórios', calendar: 'Calendário', insights: 'Insights', recurring: 'Recorrências', settings: 'Configurações'
   };
   const titleEl = document.querySelector('.page-title');
   if (titleEl) titleEl.textContent = titleMap[page] || 'Controle Financeiro';
@@ -220,6 +220,9 @@ function navigateTo(page) {
     case 'categories': renderCategories(); break;
     case 'budgets': renderBudgets(); break;
     case 'reports': renderReports(); break;
+    case 'calendar': renderCalendar(); break;
+    case 'insights': renderInsights(); break;
+    case 'recurring': renderRecurring(); break;
     case 'settings': renderSettings(); break;
   }
 
@@ -386,6 +389,8 @@ function changeMonth(dir) {
   if (currentPage === 'bills') renderBills();
   if (currentPage === 'budgets') renderBudgets();
   if (currentPage === 'reports') renderReports();
+  if (currentPage === 'calendar') renderCalendar();
+  if (currentPage === 'insights') renderInsights();
 }
 
 function updateMonthLabel() {
@@ -761,12 +766,17 @@ function renderCards() {
           <div class="card-progress-fill" style="width:${pct}%;background:${barColor}"></div>
         </div>
         <div class="card-info-row">
-          <span>Fatura: ${formatCurrency(used)}</span>
+          <span>Fatura atual: ${formatCurrency(used)}</span>
           <span>${pct}% usado</span>
+        </div>
+        <div class="invoice-extra">
+          <div><small>Período</small><strong>${formatDateBR(currentPeriodStart)} a ${formatDateBR(currentPeriodEnd)}</strong></div>
+          <div><small>Próxima fatura</small><strong>${formatCurrency(getNextCardInvoiceTotal(card))}</strong></div>
         </div>
         <div class="card-actions-row">
           <span class="card-dates">Fecha dia ${card.closing_day} · Vence dia ${card.due_day}</span>
           <div>
+            <button class="btn-icon" title="Pagar fatura" onclick="payCardInvoice('${card.id}')">✅</button>
             <button class="btn-icon" onclick="openEditCard('${card.id}')">✏️</button>
             <button class="btn-icon" onclick="confirmDelete('card','${card.id}')">🗑️</button>
           </div>
@@ -1327,6 +1337,135 @@ function renderTopExpenses(txs) {
   }).join('');
 }
 
+
+// ============================================================
+// V13: CALENDÁRIO, INSIGHTS, FATURA E RECORRÊNCIAS VISUAIS
+// ============================================================
+function getMonthTransactions() {
+  return allTransactions.filter(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+  });
+}
+
+function getNextCardInvoiceTotal(card) {
+  const today = new Date();
+  const end = new Date(getCardPeriodEnd(card, today) + 'T00:00:00');
+  const nextStart = new Date(end); nextStart.setDate(end.getDate() + 1);
+  const nextEnd = new Date(nextStart); nextEnd.setMonth(nextEnd.getMonth() + 1); nextEnd.setDate(nextEnd.getDate() - 1);
+  const startStr = nextStart.toISOString().split('T')[0];
+  const endStr = nextEnd.toISOString().split('T')[0];
+  return allTransactions.filter(t => t.credit_card_id === card.id && t.type === 'expense' && t.date >= startStr && t.date <= endStr)
+    .reduce((s,t)=>s+parseFloat(t.amount||0),0);
+}
+
+async function payCardInvoice(cardId) {
+  const card = allCards.find(c => c.id === cardId);
+  if (!card) return;
+  const today = new Date();
+  const start = getCardPeriodStart(card, today);
+  const end = getCardPeriodEnd(card, today);
+  const total = allTransactions.filter(t => t.credit_card_id === cardId && t.type === 'expense' && t.date >= start && t.date <= end && t.status !== 'paid')
+    .reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  if (total <= 0) { showToast('Essa fatura não tem pendências', 'success'); return; }
+  if (!confirm(`Marcar fatura de ${formatCurrency(total)} como paga?`)) return;
+  const { error } = await db.from('transactions')
+    .update({ status: 'paid', notes: 'Fatura paga pelo painel de cartões' })
+    .eq('user_id', currentUser.id)
+    .eq('credit_card_id', cardId)
+    .eq('type', 'expense')
+    .gte('date', start)
+    .lte('date', end);
+  if (error) { showToast('Erro ao pagar fatura', 'error'); return; }
+  await loadTransactions();
+  showToast('Fatura marcada como paga!', 'success');
+  renderCards();
+}
+
+function renderCalendar() {
+  updateMonthLabel();
+  const txs = getMonthTransactions();
+  const income = txs.filter(t=>t.type==='income' && t.status==='paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const expenses = txs.filter(t=>t.type==='expense' && t.status==='paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const pending = txs.filter(t=>t.type==='expense' && t.status!=='paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const set = (id,val)=>{const el=document.getElementById(id); if(el) el.textContent=formatCurrency(val);};
+  set('cal-income', income); set('cal-expenses', expenses); set('cal-pending', pending);
+
+  const container = document.getElementById('finance-calendar');
+  if (!container) return;
+  const first = new Date(currentYear, currentMonth - 1, 1);
+  const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+  const startBlank = first.getDay();
+  const byDay = {};
+  txs.forEach(t => {
+    const day = parseInt(t.date.split('-')[2]);
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(t);
+  });
+  let html = '<div class="calendar-weekdays"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div><div class="calendar-grid-v13">';
+  for(let i=0;i<startBlank;i++) html += '<div class="calendar-day empty"></div>';
+  for(let day=1; day<=lastDay; day++){
+    const items = byDay[day] || [];
+    const totalOut = items.filter(t=>t.type==='expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const totalIn = items.filter(t=>t.type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const hasPending = items.some(t=>t.status!=='paid');
+    html += `<div class="calendar-day ${items.length?'has-items':''}"><div class="day-num">${day}</div>${totalIn?`<div class="day-pill in">+${formatCurrency(totalIn).replace('R$','')}</div>`:''}${totalOut?`<div class="day-pill out">-${formatCurrency(totalOut).replace('R$','')}</div>`:''}${hasPending?'<div class="day-dot">pendente</div>':''}</div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderInsights() {
+  const txs = getMonthTransactions();
+  const income = txs.filter(t=>t.type==='income' && t.status==='paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const paidExpenses = txs.filter(t=>t.type==='expense' && t.status==='paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const committed = txs.filter(t=>t.type==='expense' && t.status!=='paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const projected = income - paidExpenses - committed;
+  const byCat = {};
+  txs.filter(t=>t.type==='expense').forEach(t=>{const name=t.categories?.name||'Outros'; byCat[name]=(byCat[name]||0)+parseFloat(t.amount||0);});
+  const top = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
+  const set=(id,val)=>{const el=document.getElementById(id); if(el) el.textContent=val;};
+  set('ins-projected', formatCurrency(projected));
+  set('ins-committed', formatCurrency(committed));
+  set('ins-top-cat', top ? top[0] : '-');
+
+  const list=[];
+  if (projected < 0) list.push(['danger','Seu saldo projetado está negativo se todas as pendências forem pagas.']);
+  else list.push(['success',`Depois das pendências, a previsão é sobrar ${formatCurrency(projected)}.`]);
+  if (committed > income * .4 && income>0) list.push(['warning','Seu dinheiro comprometido está alto para este mês.']);
+  if (top) list.push(['info',`Sua maior categoria de gasto é ${top[0]} (${formatCurrency(top[1])}).`]);
+  const avgDaily = paidExpenses / Math.max(1, new Date().getDate());
+  const daysLeft = new Date(currentYear, currentMonth, 0).getDate() - new Date().getDate();
+  list.push(['info',`No ritmo atual, você pode gastar mais ${formatCurrency(Math.max(0, avgDaily*daysLeft))} até o fim do mês.`]);
+  const el=document.getElementById('insights-list');
+  if(el) el.innerHTML=list.map(([type,text])=>`<div class="insight-row ${type}"><span>${type==='danger'?'🚨':type==='warning'?'⚠️':type==='success'?'✅':'💡'}</span><p>${text}</p></div>`).join('');
+}
+
+function openRecurringForm(){const el=document.getElementById('recurring-form-card'); if(el) el.classList.remove('hidden');}
+function closeRecurringForm(){const el=document.getElementById('recurring-form-card'); if(el) el.classList.add('hidden');}
+function saveRecurringFromForm(){
+  const description=document.getElementById('rec-desc')?.value.trim();
+  const amount=parseCurrency(document.getElementById('rec-amount')?.value||'');
+  const day=parseInt(document.getElementById('rec-day')?.value||'1');
+  const payment_method=document.getElementById('rec-payment')?.value||'pix';
+  if(!description||!amount||day<1||day>28){showToast('Preencha descrição, valor e dia válido','error');return;}
+  const items=getRecurringItems();
+  items.push({id:crypto.randomUUID(),description,amount,day,payment_method,lastKey:''});
+  saveRecurringItems(items);
+  ['rec-desc','rec-amount'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  closeRecurringForm();
+  showToast('Recorrência criada!','success');
+  renderRecurring();
+}
+function deleteRecurring(id){const items=getRecurringItems().filter(r=>r.id!==id);saveRecurringItems(items);renderRecurring();showToast('Recorrência apagada','success');}
+async function runRecurringNow(){await maybeRunRecurringTransactions();renderRecurring();renderCurrentPage();}
+function renderRecurring(){
+  const list=document.getElementById('recurring-list'); if(!list)return;
+  const items=getRecurringItems();
+  if(!items.length){list.innerHTML=emptyState('Nenhuma recorrência cadastrada','🔁');return;}
+  list.innerHTML = `<div class="recurring-actions"><button class="btn-add" onclick="runRecurringNow()">Gerar pendências deste mês</button></div>` + items.map(r=>`<div class="recurring-row"><div><strong>${r.description}</strong><span>${formatCurrency(r.amount)} · todo dia ${r.day} · ${paymentLabel(r.payment_method||'pix')}</span></div><button class="btn-icon" onclick="deleteRecurring('${r.id}')">🗑️</button></div>`).join('');
+}
+
 // ============================================================
 // DELETE CONFIRMAÇÃO
 // ============================================================
@@ -1563,6 +1702,8 @@ function toggleTheme() {
   // Re-renderizar gráficos com nova cor
   if (currentPage === 'dashboard') renderDashboard();
   if (currentPage === 'reports') renderReports();
+  if (currentPage === 'calendar') renderCalendar();
+  if (currentPage === 'insights') renderInsights();
 }
 
 function updateThemeIcon(theme) {
@@ -1806,3 +1947,24 @@ function rgbToHex(r,g,b) {
 window.addEventListener('DOMContentLoaded', () => {
   requestAnimationFrame(applyAppearanceV11);
 });
+
+// ============================================================
+// V13 FIX: renderizador central seguro
+// ============================================================
+function renderCurrentPage() {
+  switch (currentPage) {
+    case 'dashboard': return renderDashboard();
+    case 'transactions': return renderTransactions();
+    case 'pending-review': return renderPendingReview();
+    case 'bills': return renderBills();
+    case 'cards': return renderCards();
+    case 'categories': return renderCategories();
+    case 'budgets': return renderBudgets();
+    case 'reports': return renderReports();
+    case 'calendar': return renderCalendar();
+    case 'insights': return renderInsights();
+    case 'recurring': return renderRecurring();
+    case 'settings': return renderSettings();
+    default: return renderDashboard();
+  }
+}
