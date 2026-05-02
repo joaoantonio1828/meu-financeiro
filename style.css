@@ -1998,3 +1998,54 @@ body.cyano-dark .bottom-nav-v12 {
   .day-pill { font-size:9px; padding:3px 4px; }
   .invoice-extra { grid-template-columns:1fr; }
 }
+
+
+/* ============================================================
+   V13.1 - Correção modal + Central de ações rápidas
+   ============================================================ */
+.modal-overlay { display: none; }
+.modal-overlay.open { display: flex !important; }
+
+.quick-actions-modal { max-width: 430px; }
+.quick-actions-grid-v131 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.quick-actions-grid-v131 button {
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border-radius: 22px;
+  padding: 16px 14px;
+  min-height: 104px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-1);
+  box-shadow: 0 12px 32px rgba(0,0,0,.14);
+  transition: transform .18s ease, background .18s ease, border-color .18s ease;
+}
+.quick-actions-grid-v131 button:active { transform: scale(.97); }
+.quick-actions-grid-v131 button:hover { background: rgba(255,255,255,.13); border-color: rgba(255,255,255,.24); }
+.quick-actions-grid-v131 span {
+  width: 34px;
+  height: 34px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+}
+.quick-actions-grid-v131 strong { font-size: 15px; }
+.quick-actions-grid-v131 small { color: var(--text-3); font-size: 12px; }
+@media (max-width: 520px) {
+  .quick-actions-modal { max-width: calc(100vw - 24px); border-radius: 30px; }
+  .quick-actions-grid-v131 { gap: 10px; }
+  .quick-actions-grid-v131 button { min-height: 96px; padding: 14px 12px; }
+}

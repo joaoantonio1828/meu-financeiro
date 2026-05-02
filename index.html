@@ -603,7 +603,7 @@ catch(e){}
   </div><!-- /main-content -->
 
   <!-- FAB mobile -->
-  <button class="fab" onclick="openQuickAdd()" aria-label="Lançamento rápido">+</button>
+  <button class="fab" onclick="openQuickActions()" aria-label="Ações rápidas">+</button>
 
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav bottom-nav-v12">
@@ -952,6 +952,31 @@ catch(e){}
         <button type="submit" class="btn-primary" id="goal-save-btn">Salvar meta</button>
       </div>
     </form>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL: AÇÕES RÁPIDAS
+============================================================ -->
+<div class="modal-overlay" id="quick-actions-modal">
+  <div class="modal quick-actions-modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Ações rápidas</div>
+        <div class="section-subtitle">Escolha o que quer lançar agora</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('quick-actions-modal')">✕</button>
+    </div>
+
+    <div class="quick-actions-grid-v131">
+      <button type="button" onclick="quickAction('expense')"><span>−</span><strong>Despesa</strong><small>gasto comum</small></button>
+      <button type="button" onclick="quickAction('income')"><span>+</span><strong>Receita</strong><small>entrada</small></button>
+      <button type="button" onclick="quickAction('card')"><span>▣</span><strong>Cartão</strong><small>compra/fatura</small></button>
+      <button type="button" onclick="quickAction('bill')"><span>◷</span><strong>Conta</strong><small>a pagar</small></button>
+      <button type="button" onclick="quickAction('recurring')"><span>↻</span><strong>Recorrência</strong><small>mensal</small></button>
+      <button type="button" onclick="quickAction('pending')"><span>!</span><strong>Pendências</strong><small>revisar</small></button>
+    </div>
   </div>
 </div>
 

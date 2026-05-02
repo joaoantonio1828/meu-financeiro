@@ -2,7 +2,8 @@
 document.addEventListener('DOMContentLoaded',()=>{
  document.querySelectorAll('.modal-overlay').forEach(m=>{
   m.classList.remove('open');
-  m.style.display='none';
+  // Não usar display:none inline aqui. Isso impedia openModal() de abrir os modais.
+  m.style.display='';
  });
 });
 
@@ -1664,22 +1665,78 @@ function openQuickAdd() {
   }, 200);
 }
 
+
+// ============================================================
+// CENTRAL DE AÇÕES RÁPIDAS - V13.1
+// ============================================================
+function openQuickActions() {
+  openModal('quick-actions-modal');
+}
+
+function quickAction(action) {
+  closeModal('quick-actions-modal');
+  setTimeout(() => {
+    switch (action) {
+      case 'expense':
+        openNewTransaction('expense');
+        break;
+      case 'income':
+        openNewTransaction('income');
+        break;
+      case 'card':
+        navigateTo('cards');
+        setTimeout(openNewCard, 120);
+        break;
+      case 'bill':
+        openNewTransaction('expense');
+        setTimeout(() => {
+          const status = document.getElementById('tx-status');
+          const payment = document.getElementById('tx-payment');
+          const title = document.getElementById('tx-modal-title');
+          if (status) status.value = 'pending';
+          if (payment) payment.value = 'boleto';
+          if (title) title.textContent = 'Nova Conta a Pagar';
+          if (typeof onPaymentChange === 'function') onPaymentChange();
+        }, 180);
+        break;
+      case 'recurring':
+        navigateTo('recurring');
+        setTimeout(addRecurringPrompt, 120);
+        break;
+      case 'pending':
+        navigateTo('pending-review');
+        break;
+    }
+  }, 180);
+}
+
 // ============================================================
 // MODAL
 // ============================================================
 function openModal(id) {
-  document.getElementById(id).classList.add('open');
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.style.display = 'flex';
+  requestAnimationFrame(() => modal.classList.add('open'));
   document.body.style.overflow = 'hidden';
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.remove('open');
+  setTimeout(() => {
+    if (!modal.classList.contains('open')) modal.style.display = '';
+  }, 180);
   document.body.style.overflow = '';
 }
 
 document.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) {
     e.target.classList.remove('open');
+    setTimeout(() => {
+      if (!e.target.classList.contains('open')) e.target.style.display = '';
+    }, 180);
     document.body.style.overflow = '';
   }
 });
