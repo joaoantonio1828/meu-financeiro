@@ -207,7 +207,7 @@ function navigateTo(page) {
   const titleMap = {
     dashboard: 'Dashboard', transactions: 'Lançamentos', bills: 'Contas a Pagar',
     cards: 'Cartões', categories: 'Categorias', budgets: 'Metas e Orçamentos',
-    reports: 'Relatórios', calendar: 'Calendário', insights: 'Insights', recurring: 'Recorrências', settings: 'Configurações'
+    reports: 'Relatórios', calendar: 'Calendário', insights: 'Insights', recurring: 'Recorrências', 'import-history': 'Importações', settings: 'Configurações'
   };
   const titleEl = document.querySelector('.page-title');
   if (titleEl) titleEl.textContent = titleMap[page] || 'Controle Financeiro';
@@ -224,6 +224,7 @@ function navigateTo(page) {
     case 'calendar': renderCalendar(); break;
     case 'insights': renderInsights(); break;
     case 'recurring': renderRecurring(); break;
+    case 'import-history': renderImportHistory(); break;
     case 'settings': renderSettings(); break;
   }
 
@@ -777,6 +778,7 @@ function renderCards() {
         <div class="card-actions-row">
           <span class="card-dates">Fecha dia ${card.closing_day} · Vence dia ${card.due_day}</span>
           <div>
+            <button class="btn-icon" title="Importar fatura PDF" onclick="openInvoiceImport('${card.id}')">📄</button>
             <button class="btn-icon" title="Pagar fatura" onclick="payCardInvoice('${card.id}')">✅</button>
             <button class="btn-icon" onclick="openEditCard('${card.id}')">✏️</button>
             <button class="btn-icon" onclick="confirmDelete('card','${card.id}')">🗑️</button>
@@ -873,6 +875,544 @@ async function saveCard(e) {
     await loadCards();
     renderCards();
   }
+}
+
+
+// ============================================================
+// IMPORTAR FATURA PDF
+// ============================================================
+let invoiceImportPreview = [];
+
+function openInvoiceImport(cardId = null) {
+  if (!allCards.length) {
+    showToast('Cadastre um cartão antes de importar a fatura', 'error');
+    navigateTo('cards');
+    openNewCard();
+    return;
+  }
+
+  const cardSelect = document.getElementById('invoice-import-card');
+  if (cardSelect) {
+    cardSelect.innerHTML = allCards.map(c => `<option value="${c.id}" ${c.id === cardId ? 'selected' : ''}>${c.name}</option>`).join('');
+  }
+
+  const monthInput = document.getElementById('invoice-import-month');
+  if (monthInput && !monthInput.value) {
+    monthInput.value = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+  }
+
+  invoiceImportPreview = [];
+  const summary = document.getElementById('invoice-import-summary');
+  const list = document.getElementById('invoice-preview-list');
+  const file = document.getElementById('invoice-pdf-file');
+  if (summary) { summary.classList.add('hidden'); summary.innerHTML = ''; }
+  if (list) list.innerHTML = '';
+  if (file) file.value = '';
+  const saveBtn = document.getElementById('invoice-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
+
+  openModal('invoice-import-modal');
+}
+
+async function handleInvoicePdfFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('Selecione um arquivo PDF', 'error');
+    return;
+  }
+
+  const saveBtn = document.getElementById('invoice-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
+  const list = document.getElementById('invoice-preview-list');
+  const summary = document.getElementById('invoice-import-summary');
+  if (list) list.innerHTML = '<div class="import-loading">Lendo PDF e procurando compras...</div>';
+  if (summary) { summary.classList.add('hidden'); summary.innerHTML = ''; }
+
+  try {
+    if (!window.pdfjsLib) throw new Error('PDF.js não carregou');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    let text = '';
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const lines = content.items.map(item => item.str).join(' ');
+      text += '\n' + lines;
+    }
+
+    invoiceImportPreview = parseInvoiceTextToTransactions(text);
+    renderInvoicePreview();
+  } catch (err) {
+    console.error(err);
+    if (list) list.innerHTML = emptyState('Não consegui ler esse PDF. Tente um PDF textual da fatura, não print/imagem.', '⚠️');
+    showToast('Erro ao ler PDF', 'error');
+  }
+}
+
+function parseInvoiceTextToTransactions(text) {
+  const monthInput = document.getElementById('invoice-import-month')?.value || `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+  const [invoiceYear, invoiceMonth] = monthInput.split('-').map(Number);
+  const normalized = text
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/(\d{1,2}\s*(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ))/gi, '\n$1')
+    .replace(/(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/g, '\n$1');
+
+  const rawLines = normalized.split('\n').map(l => l.trim()).filter(Boolean);
+  const ignoredWords = /(total|pagamento|vencimento|limite|fatura|saldo|encargos|juros|iof|mínimo|minimo|nubank|mastercard|visa|resumo|crédito|credito|débito|debito|anuidade|valor a pagar|pague até|pague ate)/i;
+  const seen = new Set();
+  const results = [];
+
+  rawLines.forEach(line => {
+    if (line.length < 8) return;
+    if (ignoredWords.test(line) && !/\d+\s*\/\s*\d+/.test(line)) return;
+
+    const moneyMatches = [...line.matchAll(/(?:R\$\s*)?(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})/g)];
+    if (!moneyMatches.length) return;
+
+    const amountStr = moneyMatches[moneyMatches.length - 1][1];
+    let amount = parseCurrency(amountStr);
+    if (!amount || amount <= 0) return;
+
+    const dateInfo = extractInvoiceLineDate(line, invoiceYear, invoiceMonth);
+    const installmentInfo = extractInstallmentInfo(line);
+    let description = line;
+
+    description = description.replace(/(?:R\$\s*)?-?\d{1,3}(?:\.\d{3})*,\d{2}|(?:R\$\s*)?-?\d+,\d{2}/g, ' ');
+    description = description.replace(/\d{1,2}\s*(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)/ig, ' ');
+    description = description.replace(/\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?/g, ' ');
+    description = description.replace(/\b(parcela|parc|compra|lançamento|lancamento)\b/ig, ' ');
+    description = description.replace(/\d{1,2}\s*\/\s*\d{1,2}/g, ' ');
+    description = description.replace(/\s{2,}/g, ' ').trim();
+
+    if (!description || description.length < 3) description = 'Compra importada';
+    description = cleanInvoiceDescription(description);
+
+    const key = `${dateInfo.date}|${description.toLowerCase()}|${amount}|${installmentInfo.current}/${installmentInfo.total}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const category = guessCategoryForImport(description);
+    const needsReview = !category || category.name?.toLowerCase() === 'outros';
+
+    results.push({
+      id: crypto.randomUUID(),
+      checked: true,
+      date: dateInfo.date,
+      description,
+      amount,
+      category_id: category?.id || getOutrosCategoryId(),
+      category_name: category?.name || 'Outros',
+      installment_current: installmentInfo.current,
+      installment_total: installmentInfo.total,
+      needs_review: needsReview
+    });
+  });
+
+  return results.slice(0, 120);
+}
+
+function extractInvoiceLineDate(line, invoiceYear, invoiceMonth) {
+  const months = { JAN:1, FEV:2, MAR:3, ABR:4, MAI:5, JUN:6, JUL:7, AGO:8, SET:9, OUT:10, NOV:11, DEZ:12 };
+  let m = line.match(/(\d{1,2})\s*(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)/i);
+  if (m) {
+    const day = Math.min(28, parseInt(m[1], 10));
+    const month = months[m[2].toUpperCase()] || invoiceMonth;
+    return { date: dateFromParts(invoiceYear, month, day) };
+  }
+  m = line.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+  if (m) {
+    const day = Math.min(28, parseInt(m[1], 10));
+    const month = parseInt(m[2], 10) || invoiceMonth;
+    let year = m[3] ? parseInt(m[3], 10) : invoiceYear;
+    if (year < 100) year += 2000;
+    return { date: dateFromParts(year, month, day) };
+  }
+  return { date: dateFromParts(invoiceYear, invoiceMonth, 1) };
+}
+
+function extractInstallmentInfo(line) {
+  const m = line.match(/(?:^|\D)(\d{1,2})\s*\/\s*(\d{1,2})(?:\D|$)/);
+  if (!m) return { current: 1, total: 1 };
+  const current = Math.max(1, parseInt(m[1], 10));
+  const total = Math.max(current, parseInt(m[2], 10));
+  if (total > 48) return { current: 1, total: 1 };
+  return { current, total };
+}
+
+function dateFromParts(year, month, day) {
+  const d = new Date(year, month - 1, day);
+  return d.toISOString().split('T')[0];
+}
+
+function addMonthsToDate(dateStr, monthsToAdd) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setMonth(d.getMonth() + monthsToAdd);
+  return d.toISOString().split('T')[0];
+}
+
+function cleanInvoiceDescription(description) {
+  return description
+    .replace(/\*+/g, ' ')
+    .replace(/\bbrasil\b|\bbrazil\b/ig, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+function getOutrosCategoryId() {
+  const cat = allCategories.find(c => c.name?.toLowerCase() === 'outros' && (c.type === 'expense' || c.type === 'both'));
+  return cat?.id || null;
+}
+
+function guessCategoryForImport(description) {
+  const desc = description.toLowerCase();
+  const rules = [
+    ['Transporte', /(uber|99|posto|combust|gasolina|etanol|estacion|pedagio|pedágio|taxi|ônibus|onibus)/],
+    ['Alimentação', /(ifood|restaurante|lanch|pizza|burger|padaria|cafe|café|sorvete|açaí|acai|bar\b)/],
+    ['Mercado', /(mercado|supermercado|atacadao|atacadão|assai|assaí|carrefour|extra|atacado|comper)/],
+    ['Saúde', /(farmacia|farmácia|drogaria|droga|hospital|clinica|clínica|laboratorio|laboratório)/],
+    ['Lazer', /(cinema|netflix|spotify|prime video|disney|streaming|show|ingresso|game|steam)/],
+    ['Assinaturas', /(apple|google|icloud|amazon prime|assinatura|recorrente)/],
+    ['Educação', /(curso|faculdade|escola|livro|udemy|alura)/],
+    ['Moradia', /(aluguel|condominio|condomínio|energia|internet|agua|água)/]
+  ];
+  for (const [name, regex] of rules) {
+    if (regex.test(desc)) {
+      const cat = allCategories.find(c => c.name?.toLowerCase() === name.toLowerCase() && (c.type === 'expense' || c.type === 'both'));
+      if (cat) return cat;
+    }
+  }
+  if (typeof suggestCategoryFromText === 'function') {
+    const suggestion = suggestCategoryFromText(description);
+    if (suggestion) return suggestion;
+  }
+  return allCategories.find(c => c.name?.toLowerCase() === 'outros' && (c.type === 'expense' || c.type === 'both')) || null;
+}
+
+function renderInvoicePreview() {
+  const list = document.getElementById('invoice-preview-list');
+  const summary = document.getElementById('invoice-import-summary');
+  const saveBtn = document.getElementById('invoice-save-btn');
+  if (!list) return;
+
+  if (!invoiceImportPreview.length) {
+    list.innerHTML = emptyState('Nenhuma compra encontrada no PDF', '📄');
+    if (summary) { summary.classList.add('hidden'); summary.innerHTML = ''; }
+    if (saveBtn) saveBtn.disabled = true;
+    return;
+  }
+
+  const selectedCount = invoiceImportPreview.filter(i => i.checked).length;
+  const total = invoiceImportPreview.filter(i => i.checked).reduce((s, i) => s + Number(i.amount || 0), 0);
+  const installmentCount = invoiceImportPreview.filter(i => i.installment_total > 1).length;
+  const reviewCount = invoiceImportPreview.filter(i => i.needs_review).length;
+
+  if (summary) {
+    summary.classList.remove('hidden');
+    summary.innerHTML = `
+      <div><strong>${selectedCount}</strong><span>selecionadas</span></div>
+      <div><strong>${formatCurrency(total)}</strong><span>na fatura</span></div>
+      <div><strong>${installmentCount}</strong><span>parceladas</span></div>
+      <div><strong>${reviewCount}</strong><span>para revisar</span></div>
+    `;
+  }
+
+  const categoryOptions = '<option value="">Outros</option>' +
+    allCategories.filter(c => c.type === 'expense' || c.type === 'both')
+      .map(c => `<option value="${c.id}">${c.icon || '•'} ${c.name}</option>`).join('');
+
+  list.innerHTML = invoiceImportPreview.map((item, index) => `
+    <div class="invoice-preview-row ${item.needs_review ? 'needs-review' : ''}">
+      <label class="invoice-check"><input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleInvoiceImportItem(${index}, this.checked)"></label>
+      <div class="invoice-preview-main">
+        <div class="invoice-preview-title">${escapeHtml(item.description)}</div>
+        <div class="invoice-preview-meta">${formatDateBR(item.date)} · ${item.installment_total > 1 ? `${item.installment_current}/${item.installment_total}` : 'à vista'} · ${item.needs_review ? 'revisar categoria' : item.category_name}</div>
+      </div>
+      <div class="invoice-preview-side">
+        <div class="invoice-preview-amount">${formatCurrency(item.amount)}</div>
+        <select class="form-input invoice-category-select" onchange="setInvoiceImportCategory(${index}, this.value)">${categoryOptions}</select>
+      </div>
+    </div>
+  `).join('');
+
+  invoiceImportPreview.forEach((item, index) => {
+    const sel = list.querySelectorAll('.invoice-category-select')[index];
+    if (sel) sel.value = item.category_id || '';
+  });
+
+  if (saveBtn) saveBtn.disabled = selectedCount === 0;
+}
+
+function toggleInvoiceImportItem(index, checked) {
+  if (!invoiceImportPreview[index]) return;
+  invoiceImportPreview[index].checked = checked;
+  renderInvoicePreview();
+}
+
+function setInvoiceImportCategory(index, categoryId) {
+  const item = invoiceImportPreview[index];
+  if (!item) return;
+  item.category_id = categoryId || getOutrosCategoryId();
+  const cat = allCategories.find(c => c.id === item.category_id);
+  item.category_name = cat?.name || 'Outros';
+  item.needs_review = !categoryId || item.category_name.toLowerCase() === 'outros';
+  renderInvoicePreview();
+}
+
+
+function normalizeImportText(str) {
+  return String(str || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\(\s*\d{1,2}\s*\/\s*\d{1,2}\s*\)/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function makeImportFingerprint(row) {
+  const desc = normalizeImportText(row.description);
+  const amount = Number(row.amount || 0).toFixed(2);
+  const date = row.date || '';
+  const card = row.credit_card_id || '';
+  const parcel = row.is_installment ? `${row.installment_number || ''}/${row.installment_total || ''}` : 'avista';
+  return `${card}|${date}|${desc}|${amount}|${parcel}`;
+}
+
+function parseImportMeta(notes) {
+  const text = String(notes || '');
+  return {
+    batchId: (text.match(/\[IMPORT_BATCH:([^\]]+)\]/) || [])[1] || null,
+    batchName: (text.match(/\[IMPORT_NAME:([^\]]+)\]/) || [])[1] || 'Fatura importada',
+    source: (text.match(/\[SOURCE:([^\]]+)\]/) || [])[1] || null,
+    key: (text.match(/\[IMPORT_KEY:([^\]]+)\]/) || [])[1] || null,
+    createdAt: (text.match(/\[IMPORT_AT:([^\]]+)\]/) || [])[1] || null
+  };
+}
+
+function buildExistingTransactionFingerprints(cardId = null) {
+  const set = new Set();
+  allTransactions.forEach(t => {
+    if (cardId && t.credit_card_id !== cardId) return;
+    set.add(makeImportFingerprint({
+      description: t.description,
+      amount: Number(t.amount || 0),
+      date: t.date,
+      credit_card_id: t.credit_card_id,
+      is_installment: !!t.is_installment,
+      installment_number: t.installment_number,
+      installment_total: t.installment_total
+    }));
+    const meta = parseImportMeta(t.notes);
+    if (meta.key) set.add(meta.key);
+  });
+  return set;
+}
+
+function registerLocalActivity(action, payload = {}) {
+  try {
+    const key = `cyano_activity_${currentUser?.id || 'local'}`;
+    const items = JSON.parse(localStorage.getItem(key) || '[]');
+    items.unshift({ id: crypto.randomUUID(), at: new Date().toISOString(), action, ...payload });
+    localStorage.setItem(key, JSON.stringify(items.slice(0, 50)));
+  } catch (e) { console.warn('activity log failed', e); }
+}
+
+async function confirmInvoiceImport() {
+  const cardId = document.getElementById('invoice-import-card')?.value;
+  if (!cardId) { showToast('Selecione o cartão', 'error'); return; }
+  const selected = invoiceImportPreview.filter(i => i.checked);
+  if (!selected.length) { showToast('Nenhuma compra selecionada', 'error'); return; }
+
+  const card = allCards.find(c => c.id === cardId);
+  const monthInput = document.getElementById('invoice-import-month')?.value || `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+  const batchId = crypto.randomUUID();
+  const batchName = `${card?.name || 'Cartão'} ${monthInput}`;
+  const importAt = new Date().toISOString();
+  const existing = buildExistingTransactionFingerprints(cardId);
+  const rows = [];
+  const duplicates = [];
+  const reviewRows = [];
+  const invalidRows = [];
+
+  selected.forEach(item => {
+    if (!item.amount || Number(item.amount) <= 0 || !item.date || !item.description) {
+      invalidRows.push(item);
+      return;
+    }
+
+    const groupId = item.installment_total > 1 ? crypto.randomUUID() : null;
+    const start = item.installment_total > 1 ? item.installment_current : 1;
+    const total = item.installment_total || 1;
+
+    for (let n = start; n <= total; n++) {
+      const monthOffset = n - start;
+      const row = {
+        user_id: currentUser.id,
+        type: 'expense',
+        description: total > 1 ? `${item.description} (${String(n).padStart(2, '0')}/${String(total).padStart(2, '0')})` : item.description,
+        amount: Number(item.amount || 0),
+        date: addMonthsToDate(item.date, monthOffset),
+        category_id: item.category_id || getOutrosCategoryId(),
+        status: 'pending',
+        payment_method: 'credit_card',
+        credit_card_id: cardId,
+        is_installment: total > 1,
+        installment_number: total > 1 ? n : null,
+        installment_total: total > 1 ? total : null,
+        installment_group_id: groupId
+      };
+
+      const fingerprint = makeImportFingerprint(row);
+      if (existing.has(fingerprint)) {
+        duplicates.push(row);
+        return;
+      }
+      existing.add(fingerprint);
+
+      const needsReview = item.needs_review || !item.category_id || (item.category_name || '').toLowerCase() === 'outros';
+      if (needsReview) reviewRows.push(row);
+      row.notes = `${needsReview ? '[REVISAR] ' : ''}[SOURCE:import_pdf] [IMPORTADO PDF] [IMPORT_BATCH:${batchId}] [IMPORT_NAME:${batchName}] [IMPORT_AT:${importAt}] [IMPORT_KEY:${fingerprint}] Conferir fatura/categoria`;
+      rows.push(row);
+    }
+  });
+
+  if (!rows.length) {
+    showToast(`Nada novo para importar. ${duplicates.length} duplicado(s) ignorado(s).`, 'success');
+    if (document.getElementById('invoice-import-summary')) {
+      document.getElementById('invoice-import-summary').classList.remove('hidden');
+      document.getElementById('invoice-import-summary').innerHTML = `<div><strong>0</strong><span>criados</span></div><div><strong>${duplicates.length}</strong><span>duplicados</span></div><div><strong>${invalidRows.length}</strong><span>inválidos</span></div>`;
+    }
+    return;
+  }
+
+  setLoading('invoice-save-btn', true);
+  const { error } = await db.from('transactions').insert(rows);
+  setLoading('invoice-save-btn', false);
+
+  if (error) {
+    console.error(error);
+    showToast('Erro ao salvar importação', 'error');
+    return;
+  }
+
+  registerLocalActivity('import_pdf', { batchId, batchName, created: rows.length, duplicates: duplicates.length, review: reviewRows.length });
+  showToast(`Importação salva: ${rows.length} criado(s), ${duplicates.length} duplicado(s) ignorado(s), ${reviewRows.length} para revisar.`, 'success');
+  closeModal('invoice-import-modal');
+  await loadTransactions();
+  renderCurrentPage();
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
+}
+
+
+// ============================================================
+// HISTÓRICO DE IMPORTAÇÕES / ANTI-BAGUNÇA
+// ============================================================
+function getImportBatches() {
+  const map = new Map();
+  allTransactions.forEach(t => {
+    const meta = parseImportMeta(t.notes);
+    if (!meta.batchId) return;
+    if (!map.has(meta.batchId)) {
+      map.set(meta.batchId, {
+        batchId: meta.batchId,
+        batchName: meta.batchName || 'Fatura importada',
+        createdAt: meta.createdAt,
+        cardId: t.credit_card_id,
+        items: [],
+        total: 0,
+        review: 0
+      });
+    }
+    const batch = map.get(meta.batchId);
+    batch.items.push(t);
+    batch.total += Number(t.amount || 0);
+    if (String(t.notes || '').includes('[REVISAR]')) batch.review += 1;
+  });
+  return Array.from(map.values()).sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+
+function renderImportHistory() {
+  const list = document.getElementById('import-history-list');
+  const count = document.getElementById('import-history-count');
+  if (!list) return;
+  const batches = getImportBatches();
+  if (count) count.textContent = batches.length;
+
+  if (!batches.length) {
+    list.innerHTML = emptyState('Nenhuma fatura importada ainda', '🧾');
+    return;
+  }
+
+  list.innerHTML = batches.map(batch => {
+    const card = allCards.find(c => c.id === batch.cardId);
+    const paid = batch.items.filter(i => i.status === 'paid').length;
+    const pending = batch.items.filter(i => i.status !== 'paid').length;
+    return `
+      <div class="import-batch-card" id="import-batch-${batch.batchId}">
+        <div class="import-batch-head">
+          <div>
+            <div class="import-batch-title">${escapeHtml(batch.batchName)}</div>
+            <div class="import-batch-meta">${card?.name || 'Cartão'} · ${batch.createdAt ? new Date(batch.createdAt).toLocaleString('pt-BR') : 'sem data'} · ${batch.items.length} lançamento(s)</div>
+          </div>
+          <div class="import-batch-total">${formatCurrency(batch.total)}</div>
+        </div>
+        <div class="import-batch-stats">
+          <span>${pending} pendente(s)</span>
+          <span>${paid} pago(s)</span>
+          <span>${batch.review} para revisar</span>
+        </div>
+        <div class="import-batch-actions">
+          <button class="btn-secondary" onclick="toggleImportBatchItems('${batch.batchId}')">Ver itens</button>
+          <button class="btn-danger" onclick="deleteImportBatch('${batch.batchId}')">Excluir importação</button>
+        </div>
+        <div class="import-batch-items hidden" id="import-batch-items-${batch.batchId}">
+          ${batch.items.sort((a,b)=>a.date.localeCompare(b.date)).map(item => `
+            <div class="import-batch-item">
+              <div>
+                <strong>${escapeHtml(item.description)}</strong>
+                <span>${formatDateBR(item.date)} · ${item.status === 'paid' ? 'Pago' : 'Pendente'} ${String(item.notes || '').includes('[REVISAR]') ? '· revisar' : ''}</span>
+              </div>
+              <b>${formatCurrency(item.amount)}</b>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleImportBatchItems(batchId) {
+  const el = document.getElementById('import-batch-items-' + batchId);
+  if (el) el.classList.toggle('hidden');
+}
+
+async function deleteImportBatch(batchId) {
+  if (!batchId) return;
+  const batches = getImportBatches();
+  const batch = batches.find(b => b.batchId === batchId);
+  const count = batch?.items?.length || 0;
+  if (!confirm(`Excluir esta importação e apagar ${count} lançamento(s) criados por ela?`)) return;
+
+  const ids = (batch?.items || []).map(i => i.id);
+  if (!ids.length) return;
+  const { error } = await db.from('transactions').delete().in('id', ids).eq('user_id', currentUser.id);
+  if (error) {
+    console.error(error);
+    showToast('Erro ao excluir importação', 'error');
+    return;
+  }
+  registerLocalActivity('delete_import_batch', { batchId, deleted: ids.length });
+  showToast(`Importação excluída: ${ids.length} lançamento(s) apagado(s).`, 'success');
+  await loadTransactions();
+  renderImportHistory();
+  if (currentPage === 'dashboard') renderDashboard();
 }
 
 // ============================================================
@@ -2021,6 +2561,7 @@ function renderCurrentPage() {
     case 'calendar': return renderCalendar();
     case 'insights': return renderInsights();
     case 'recurring': return renderRecurring();
+    case 'import-history': return renderImportHistory();
     case 'settings': return renderSettings();
     default: return renderDashboard();
   }
