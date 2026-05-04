@@ -952,6 +952,27 @@ async function handleInvoicePdfFile(event) {
   }
 }
 
+
+function isInvoiceSummaryLine(line) {
+  const l = String(line || '').toLowerCase();
+  // Linhas de resumo/total da fatura NUNCA devem virar compra.
+  // Isso evita importar o total da fatura + itens individuais e quase dobrar o valor.
+  return /(^|\b)(total|totais|subtotal|resumo|fatura atual|fechamento|vencimento|pagamento|pague até|pague ate|valor a pagar|pagamento recebido|limite disponível|limite disponivel|limite total|saldo|encargos|juros|iof|mínimo|minimo|crédito rotativo|credito rotativo|nubank ultravioleta|mastercard|visa)(\b|:)/i.test(l);
+}
+
+function getDayFromDate(dateStr, fallback = 1) {
+  const parts = String(dateStr || '').split('-');
+  const day = parseInt(parts[2], 10);
+  return Number.isFinite(day) ? Math.min(28, Math.max(1, day)) : fallback;
+}
+
+function getInvoiceMonthBaseDate(originalDate, invoiceYear, invoiceMonth) {
+  // Para fatura importada, a parcela atual deve cair no mês selecionado da fatura,
+  // mesmo se a data exibida no PDF for a data da compra original.
+  const day = getDayFromDate(originalDate, 1);
+  return dateFromParts(invoiceYear, invoiceMonth, day);
+}
+
 function parseInvoiceTextToTransactions(text) {
   const monthInput = document.getElementById('invoice-import-month')?.value || `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
   const [invoiceYear, invoiceMonth] = monthInput.split('-').map(Number);
@@ -962,16 +983,22 @@ function parseInvoiceTextToTransactions(text) {
     .replace(/(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/g, '\n$1');
 
   const rawLines = normalized.split('\n').map(l => l.trim()).filter(Boolean);
-  const ignoredWords = /(total|pagamento|vencimento|limite|fatura|saldo|encargos|juros|iof|mínimo|minimo|nubank|mastercard|visa|resumo|crédito|credito|débito|debito|anuidade|valor a pagar|pague até|pague ate)/i;
+  const ignoredWords = /(pagamento recebido|compra cancelada|estorno|cashback|ajuste de crédito|ajuste de credito)/i;
   const seen = new Set();
+  const seenNoDate = new Set();
   const results = [];
 
   rawLines.forEach(line => {
     if (line.length < 8) return;
-    if (ignoredWords.test(line) && !/\d+\s*\/\s*\d+/.test(line)) return;
+    if (isInvoiceSummaryLine(line)) return;
+    if (ignoredWords.test(line)) return;
 
     const moneyMatches = [...line.matchAll(/(?:R\$\s*)?(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})/g)];
     if (!moneyMatches.length) return;
+
+    // Se a linha tem muitos valores, geralmente é resumo/parcelamento/total misturado.
+    // Mantemos o último valor apenas quando a linha parece uma compra real.
+    if (moneyMatches.length > 2 && !/\d{1,2}\s*\/\s*\d{1,2}/.test(line)) return;
 
     const amountStr = moneyMatches[moneyMatches.length - 1][1];
     let amount = parseCurrency(amountStr);
@@ -991,9 +1018,12 @@ function parseInvoiceTextToTransactions(text) {
     if (!description || description.length < 3) description = 'Compra importada';
     description = cleanInvoiceDescription(description);
 
-    const key = `${dateInfo.date}|${description.toLowerCase()}|${amount}|${installmentInfo.current}/${installmentInfo.total}`;
-    if (seen.has(key)) return;
+    const cleanKeyDesc = normalizeImportText(description);
+    const key = `${dateInfo.date}|${cleanKeyDesc}|${amount.toFixed(2)}|${installmentInfo.current}/${installmentInfo.total}`;
+    const noDateKey = `${cleanKeyDesc}|${amount.toFixed(2)}|${installmentInfo.current}/${installmentInfo.total}`;
+    if (seen.has(key) || seenNoDate.has(noDateKey)) return;
     seen.add(key);
+    seenNoDate.add(noDateKey);
 
     const category = guessCategoryForImport(description);
     const needsReview = !category || category.name?.toLowerCase() === 'outros';
@@ -1001,7 +1031,8 @@ function parseInvoiceTextToTransactions(text) {
     results.push({
       id: crypto.randomUUID(),
       checked: true,
-      date: dateInfo.date,
+      date: getInvoiceMonthBaseDate(dateInfo.date, invoiceYear, invoiceMonth),
+      original_date: dateInfo.date,
       description,
       amount,
       category_id: category?.id || getOutrosCategoryId(),
@@ -1106,8 +1137,13 @@ function renderInvoicePreview() {
     return;
   }
 
-  const selectedCount = invoiceImportPreview.filter(i => i.checked).length;
-  const total = invoiceImportPreview.filter(i => i.checked).reduce((s, i) => s + Number(i.amount || 0), 0);
+  const selectedItems = invoiceImportPreview.filter(i => i.checked);
+  const selectedCount = selectedItems.length;
+  const total = selectedItems.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const futureTotal = selectedItems.reduce((s, i) => {
+    const remaining = Math.max(0, Number(i.installment_total || 1) - Number(i.installment_current || 1));
+    return s + (Number(i.amount || 0) * remaining);
+  }, 0);
   const installmentCount = invoiceImportPreview.filter(i => i.installment_total > 1).length;
   const reviewCount = invoiceImportPreview.filter(i => i.needs_review).length;
 
@@ -1115,8 +1151,8 @@ function renderInvoicePreview() {
     summary.classList.remove('hidden');
     summary.innerHTML = `
       <div><strong>${selectedCount}</strong><span>selecionadas</span></div>
-      <div><strong>${formatCurrency(total)}</strong><span>na fatura</span></div>
-      <div><strong>${installmentCount}</strong><span>parceladas</span></div>
+      <div><strong>${formatCurrency(total)}</strong><span>fatura atual</span></div>
+      <div><strong>${formatCurrency(futureTotal)}</strong><span>futuro agendado</span></div>
       <div><strong>${reviewCount}</strong><span>para revisar</span></div>
     `;
   }
@@ -1229,6 +1265,7 @@ async function confirmInvoiceImport() {
 
   const card = allCards.find(c => c.id === cardId);
   const monthInput = document.getElementById('invoice-import-month')?.value || `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+  const [invoiceYearForRows, invoiceMonthForRows] = monthInput.split('-').map(Number);
   const batchId = crypto.randomUUID();
   const batchName = `${card?.name || 'Cartão'} ${monthInput}`;
   const importAt = new Date().toISOString();
@@ -1247,6 +1284,7 @@ async function confirmInvoiceImport() {
     const groupId = item.installment_total > 1 ? crypto.randomUUID() : null;
     const start = item.installment_total > 1 ? item.installment_current : 1;
     const total = item.installment_total || 1;
+    const baseInvoiceDate = getInvoiceMonthBaseDate(item.original_date || item.date, invoiceYearForRows, invoiceMonthForRows);
 
     for (let n = start; n <= total; n++) {
       const monthOffset = n - start;
@@ -1255,7 +1293,7 @@ async function confirmInvoiceImport() {
         type: 'expense',
         description: total > 1 ? `${item.description} (${String(n).padStart(2, '0')}/${String(total).padStart(2, '0')})` : item.description,
         amount: Number(item.amount || 0),
-        date: addMonthsToDate(item.date, monthOffset),
+        date: addMonthsToDate(baseInvoiceDate, monthOffset),
         category_id: item.category_id || getOutrosCategoryId(),
         status: 'pending',
         payment_method: 'credit_card',
@@ -1275,7 +1313,8 @@ async function confirmInvoiceImport() {
 
       const needsReview = item.needs_review || !item.category_id || (item.category_name || '').toLowerCase() === 'outros';
       if (needsReview) reviewRows.push(row);
-      row.notes = `${needsReview ? '[REVISAR] ' : ''}[SOURCE:import_pdf] [IMPORTADO PDF] [IMPORT_BATCH:${batchId}] [IMPORT_NAME:${batchName}] [IMPORT_AT:${importAt}] [IMPORT_KEY:${fingerprint}] Conferir fatura/categoria`;
+      const currentInvoiceTag = n === start ? '[FATURA_ATUAL] ' : '[PARCELA_FUTURA] ';
+      row.notes = `${needsReview ? '[REVISAR] ' : ''}${currentInvoiceTag}[SOURCE:import_pdf] [IMPORTADO PDF] [IMPORT_BATCH:${batchId}] [IMPORT_NAME:${batchName}] [IMPORT_AT:${importAt}] [IMPORT_KEY:${fingerprint}] [ORIGINAL_DATE:${item.original_date || item.date}] Conferir fatura/categoria`;
       rows.push(row);
     }
   });
@@ -1299,8 +1338,10 @@ async function confirmInvoiceImport() {
     return;
   }
 
-  registerLocalActivity('import_pdf', { batchId, batchName, created: rows.length, duplicates: duplicates.length, review: reviewRows.length });
-  showToast(`Importação salva: ${rows.length} criado(s), ${duplicates.length} duplicado(s) ignorado(s), ${reviewRows.length} para revisar.`, 'success');
+  const currentRows = rows.filter(r => String(r.notes || '').includes('[FATURA_ATUAL]')).length;
+  const futureRows = rows.length - currentRows;
+  registerLocalActivity('import_pdf', { batchId, batchName, created: rows.length, currentRows, futureRows, duplicates: duplicates.length, review: reviewRows.length });
+  showToast(`Importação salva: ${currentRows} da fatura atual + ${futureRows} futura(s). ${duplicates.length} duplicado(s) ignorado(s).`, 'success');
   closeModal('invoice-import-modal');
   await loadTransactions();
   renderCurrentPage();
