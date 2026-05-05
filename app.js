@@ -2912,41 +2912,74 @@ async function saveSubscriptionFromForm(){
   saveSubscriptions(subs);
   closeSubscriptionForm();
   showToast(id ? 'Assinatura atualizada!' : 'Assinatura criada!', 'success');
-  await generateSubscriptionForCurrentMonth(payload, {silent:true});
+  await generateSubscriptionMonths(payload, 12, {silent:true});
+  showToast(id ? 'Assinatura atualizada e próximos meses verificados!' : 'Assinatura criada e próximos 12 meses gerados!', 'success');
   renderSubscriptions();
   if (currentPage === 'cards') renderCards();
 }
 function subscriptionMonthKey(year=currentYear, month=currentMonth){
   return `${year}-${String(month).padStart(2,'0')}`;
 }
+function addMonthsFromCurrent(offset=0){
+  const d = new Date(currentYear, currentMonth - 1 + offset, 1);
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
 function subscriptionChargeDate(sub, year=currentYear, month=currentMonth){
-  const d = new Date(year, month - 1, Math.min(28, sub.day || 5));
+  const d = new Date(year, month - 1, Math.min(28, Number(sub.day || 5)));
   return d.toISOString().split('T')[0];
 }
 function subscriptionExists(sub, monthKey){
   return allTransactions.some(t => String(t.notes||'').includes(`[SUBSCRIPTION_ID:${sub.id}]`) && String(t.notes||'').includes(`[SUB_MONTH:${monthKey}]`));
 }
-async function generateSubscriptionForCurrentMonth(sub, opts={}){
-  if (!sub || sub.status !== 'active') return {created:0, skipped:0};
-  const monthKey = subscriptionMonthKey();
-  if (subscriptionExists(sub, monthKey)) return {created:0, skipped:1};
-  const row = {
+function buildSubscriptionRow(sub, year=currentYear, month=currentMonth){
+  const monthKey = subscriptionMonthKey(year, month);
+  return {
     user_id: currentUser.id,
     type: 'expense',
     description: `${sub.name} (Assinatura)`,
     amount: Number(sub.amount || 0),
-    date: subscriptionChargeDate(sub),
+    date: subscriptionChargeDate(sub, year, month),
     category_id: guessSubscriptionCategoryId(sub.name),
     status: 'pending',
     payment_method: sub.payment_method || 'pix',
     credit_card_id: sub.payment_method === 'credit_card' ? (sub.credit_card_id || null) : null,
     notes: `[SOURCE:subscription] [SUBSCRIPTION_ID:${sub.id}] [SUB_MONTH:${monthKey}] ${sub.notes || ''}`.trim()
   };
-  const { error } = await db.from('transactions').insert(row);
-  if (error) { console.error(error); if(!opts.silent) showToast('Erro ao gerar cobrança', 'error'); return {created:0, skipped:0, error}; }
+}
+async function generateSubscriptionMonths(sub, months=12, opts={}){
+  if (!sub || sub.status !== 'active') return {created:0, skipped:0};
+  months = Math.max(1, Math.min(36, Number(months || 12)));
+  const rows = [];
+  let skipped = 0;
+  for (let i = 0; i < months; i++) {
+    const { year, month } = addMonthsFromCurrent(i);
+    const monthKey = subscriptionMonthKey(year, month);
+    if (subscriptionExists(sub, monthKey) || rows.some(r => String(r.notes||'').includes(`[SUB_MONTH:${monthKey}]`))) {
+      skipped++;
+      continue;
+    }
+    rows.push(buildSubscriptionRow(sub, year, month));
+  }
+  if (!rows.length) {
+    if(!opts.silent) showToast(`Nenhuma cobrança nova. ${skipped} mês(es) já existiam.`, 'success');
+    return {created:0, skipped};
+  }
+  const { error } = await db.from('transactions').insert(rows);
+  if (error) { console.error(error); if(!opts.silent) showToast('Erro ao gerar assinaturas', 'error'); return {created:0, skipped, error}; }
   await loadTransactions();
-  if(!opts.silent) showToast('Cobrança da assinatura gerada!', 'success');
-  return {created:1, skipped:0};
+  if(!opts.silent) showToast(`${rows.length} cobrança(s) gerada(s). ${skipped} já existiam.`, 'success');
+  return {created:rows.length, skipped};
+}
+async function generateSubscriptionForCurrentMonth(sub, opts={}){
+  return generateSubscriptionMonths(sub, 1, opts);
+}
+async function generateSubscriptionFuture(id, months=12){
+  const sub = loadSubscriptions().find(s=>s.id===id);
+  const res = await generateSubscriptionMonths(sub, months, {silent:false});
+  await loadTransactions();
+  renderSubscriptions();
+  if (currentPage === 'cards') renderCards();
+  return res;
 }
 function guessSubscriptionCategoryId(name){
   const s = normalizeSubName(name);
@@ -2962,10 +2995,10 @@ async function generateAllSubscriptionsForCurrentMonth(){
   const subs = loadSubscriptions().filter(s=>s.status==='active');
   let created=0, skipped=0;
   for (const sub of subs) {
-    const res = await generateSubscriptionForCurrentMonth(sub, {silent:true});
+    const res = await generateSubscriptionMonths(sub, 12, {silent:true});
     created += res.created || 0; skipped += res.skipped || 0;
   }
-  showToast(`Assinaturas: ${created} criada(s), ${skipped} já existiam`, 'success');
+  showToast(`Assinaturas: ${created} cobrança(s) gerada(s), ${skipped} já existiam`, 'success');
   await loadTransactions();
   renderSubscriptions();
   renderCurrentPage();
@@ -3006,7 +3039,7 @@ function renderSubscriptions(){
       <div class="subscription-actions">
         <button class="btn-icon" title="Editar" onclick="openSubscriptionForm('${sub.id}')">✏️</button>
         <button class="btn-icon" title="Pausar/ativar" onclick="toggleSubscriptionStatus('${sub.id}')">${sub.status==='active'?'⏸️':'▶️'}</button>
-        <button class="btn-icon" title="Gerar agora" onclick="generateSubscriptionForCurrentMonth(loadSubscriptions().find(s=>s.id==='${sub.id}')).then(()=>renderSubscriptions())">➕</button>
+        <button class="btn-icon" title="Gerar próximos 12 meses" onclick="generateSubscriptionFuture('${sub.id}', 12)">📆</button>
         <button class="btn-icon" title="Excluir" onclick="deleteSubscription('${sub.id}')">🗑️</button>
       </div>
     </div>`;
