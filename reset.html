@@ -1,37 +1,122 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Redefinir senha - CYANO</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redefinir senha - CYANO</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --card: #0f172a;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --primary: #2563eb;
+      --border: rgba(148, 163, 184, .25);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px; background: radial-gradient(circle at top, rgba(37,99,235,.28), transparent 38%), var(--bg);
+      color: var(--text); font-family: Arial, Helvetica, sans-serif;
+    }
+    .card {
+      width: 100%; max-width: 420px; background: rgba(15, 23, 42, .96); border: 1px solid var(--border);
+      border-radius: 22px; padding: 28px; box-shadow: 0 24px 70px rgba(0,0,0,.35);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; font-weight: 800; letter-spacing: .08em; }
+    .brand-badge { width: 34px; height: 34px; border-radius: 12px; background: linear-gradient(135deg, #2563eb, #06b6d4); }
+    h1 { margin: 0 0 8px; font-size: 26px; }
+    p { margin: 0 0 22px; color: var(--muted); line-height: 1.5; font-size: 15px; }
+    label { display: block; margin: 14px 0 7px; color: var(--muted); font-size: 13px; font-weight: 700; }
+    input { width: 100%; padding: 14px 15px; border-radius: 14px; border: 1px solid var(--border); background: #020617; color: var(--text); outline: none; font-size: 16px; }
+    input:focus { border-color: rgba(37,99,235,.9); box-shadow: 0 0 0 4px rgba(37,99,235,.16); }
+    button { width: 100%; margin-top: 18px; padding: 14px 16px; border: 0; border-radius: 14px; background: linear-gradient(135deg, #2563eb, #06b6d4); color: white; font-size: 16px; font-weight: 800; cursor: pointer; }
+    button:disabled { opacity: .65; cursor: not-allowed; }
+    .message { margin-top: 16px; padding: 12px; border-radius: 14px; display: none; font-size: 14px; line-height: 1.45; }
+    .message.success { display: block; background: rgba(34,197,94,.12); color: #86efac; border: 1px solid rgba(34,197,94,.25); }
+    .message.error { display: block; background: rgba(239,68,68,.12); color: #fca5a5; border: 1px solid rgba(239,68,68,.25); }
+    .back { display: block; margin-top: 18px; text-align: center; color: var(--muted); text-decoration: none; font-size: 14px; }
+  </style>
 </head>
 <body>
-<div class="container">
-  <h2>Redefinir senha 🔐</h2>
-  <input type="password" id="password" placeholder="Nova senha">
-  <button onclick="resetPassword()">Salvar nova senha</button>
-  <p id="msg"></p>
-</div>
+  <main class="card">
+    <div class="brand"><span class="brand-badge"></span><span>CYANO</span></div>
+    <h1>Criar nova senha</h1>
+    <p>Digite sua nova senha para recuperar o acesso à sua conta.</p>
+    <form id="reset-form">
+      <label for="new-password">Nova senha</label>
+      <input id="new-password" type="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required />
+      <label for="confirm-password">Confirmar senha</label>
+      <input id="confirm-password" type="password" autocomplete="new-password" placeholder="Digite novamente" required />
+      <button id="reset-btn" type="submit">Salvar nova senha</button>
+    </form>
+    <div id="reset-message" class="message"></div>
+    <a class="back" href="/index.html">Voltar para o login</a>
+  </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-const supabase = window.supabase.createClient(
-  "SEU_PROJECT_URL",
-  "SEU_ANON_KEY"
-);
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://vckpovszyxcdnxdxlgnp.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_znq3_9Z7-WaRgKlSHbi0DA_ZAgFvFyc";
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+    });
 
-async function resetPassword() {
-  const password = document.getElementById("password").value;
-  const { error } = await supabase.auth.updateUser({ password });
+    const form = document.getElementById("reset-form");
+    const btn = document.getElementById("reset-btn");
+    const msg = document.getElementById("reset-message");
 
-  const msg = document.getElementById("msg");
-  if (error) {
-    msg.innerText = "Erro ao redefinir senha";
-  } else {
-    msg.innerText = "Senha atualizada com sucesso!";
-  }
-}
-</script>
+    function showMessage(text, type) {
+      msg.textContent = text;
+      msg.className = "message " + type;
+    }
+
+    async function prepareRecoverySession() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+
+      if (code) {
+        const { error } = await db.auth.exchangeCodeForSession(code);
+        if (error) {
+          showMessage("Link inválido ou expirado. Peça um novo e-mail em 'Esqueci minha senha'.", "error");
+          btn.disabled = true;
+          return;
+        }
+        window.history.replaceState({}, document.title, "/reset.html");
+      }
+
+      const { data } = await db.auth.getSession();
+      if (!data.session) {
+        showMessage("Link inválido ou expirado. Peça um novo e-mail em 'Esqueci minha senha'.", "error");
+        btn.disabled = true;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const password = document.getElementById("new-password").value.trim();
+      const confirm = document.getElementById("confirm-password").value.trim();
+
+      if (password.length < 6) { showMessage("A senha deve ter pelo menos 6 caracteres.", "error"); return; }
+      if (password !== confirm) { showMessage("As senhas não conferem.", "error"); return; }
+
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+      const { error } = await db.auth.updateUser({ password });
+
+      if (error) {
+        btn.disabled = false;
+        btn.textContent = "Salvar nova senha";
+        showMessage(error.message || "Não foi possível alterar a senha.", "error");
+        return;
+      }
+
+      await db.auth.signOut();
+      showMessage("Senha alterada com sucesso! Você será enviado para o login.", "success");
+      setTimeout(() => { window.location.href = "/index.html"; }, 1800);
+    });
+
+    prepareRecoverySession();
+  </script>
 </body>
 </html>

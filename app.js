@@ -194,7 +194,7 @@ async function handleForgot(e) {
   const email = document.getElementById('forgot-email').value.trim();
   setLoading('forgot-btn', true);
   const { error } = await db.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}${window.location.pathname}`
+    redirectTo: 'https://project-jvg4s.vercel.app/reset.html'
   });
   setLoading('forgot-btn', false);
   if (error) {
