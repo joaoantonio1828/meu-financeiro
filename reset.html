@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redefinir senha - CYANO</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <h2>Redefinir senha 🔐</h2>
+  <input type="password" id="password" placeholder="Nova senha">
+  <button onclick="resetPassword()">Salvar nova senha</button>
+  <p id="msg"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const supabase = window.supabase.createClient(
+  "SEU_PROJECT_URL",
+  "SEU_ANON_KEY"
+);
+
+async function resetPassword() {
+  const password = document.getElementById("password").value;
+  const { error } = await supabase.auth.updateUser({ password });
+
+  const msg = document.getElementById("msg");
+  if (error) {
+    msg.innerText = "Erro ao redefinir senha";
+  } else {
+    msg.innerText = "Senha atualizada com sucesso!";
+  }
+}
+</script>
+</body>
+</html>
