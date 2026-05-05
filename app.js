@@ -95,6 +95,7 @@ async function showApp() {
   document.getElementById('app-screen').classList.remove('hidden');
   document.getElementById('user-name').textContent = currentUser.email.split('@')[0];
   document.getElementById('user-email').textContent = currentUser.email;
+  if (typeof applyProfileV17 === 'function') applyProfileV17();
   await loadAllData();
   initPWAExperience();
   navigateTo('dashboard');
@@ -230,11 +231,19 @@ function navigateTo(page) {
   }
 
   // Fechar sidebar mobile
-  document.getElementById('sidebar').classList.remove('open');
+  if (typeof closeSidebar === 'function') closeSidebar(); else document.getElementById('sidebar').classList.remove('open');
 }
 
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('open');
+  document.body.classList.toggle('sidebar-open-v17', sidebar.classList.contains('open'));
+}
+
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('open');
+  document.body.classList.remove('sidebar-open-v17');
 }
 
 // ============================================================
@@ -2169,6 +2178,7 @@ function renderSettings() {
   }
   const emailEl = document.getElementById('settings-email');
   if (emailEl && currentUser) emailEl.textContent = currentUser.email;
+  if (typeof syncProfileControlsV17 === 'function') syncProfileControlsV17();
   syncAppearanceControlsV11();
 }
 
@@ -3039,3 +3049,105 @@ function detectPossibleSubscriptions(){
     }
   } catch(e) { console.warn('subs nav wrapper failed', e); }
 })();
+
+
+// ============================================================
+// V17.1 - PERFIL, CAMADAS MOBILE E RESUMO RÁPIDO
+// ============================================================
+const CYANO_PROFILE_V17_KEY = 'cyano_profile_v17';
+
+function getProfileV17() {
+  try { return JSON.parse(localStorage.getItem(CYANO_PROFILE_V17_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function saveProfileV17(profile) {
+  localStorage.setItem(CYANO_PROFILE_V17_KEY, JSON.stringify({ ...getProfileV17(), ...profile }));
+  applyProfileV17();
+}
+
+function applyProfileV17() {
+  const profile = getProfileV17();
+  const fallbackName = currentUser?.email?.split('@')?.[0] || 'Usuário';
+  const displayName = (profile.name || '').trim() || fallbackName;
+  const avatarUrl = profile.avatar || '';
+
+  const userName = document.getElementById('user-name');
+  if (userName) userName.textContent = displayName;
+
+  const avatar = document.getElementById('user-avatar');
+  if (avatar) {
+    if (avatarUrl) {
+      avatar.innerHTML = `<img src="${avatarUrl}" alt="Foto de perfil">`;
+      avatar.classList.add('has-photo-v17');
+    } else {
+      avatar.textContent = displayName.charAt(0).toUpperCase();
+      avatar.classList.remove('has-photo-v17');
+    }
+  }
+
+  const preview = document.getElementById('profile-photo-preview');
+  if (preview) {
+    if (avatarUrl) {
+      preview.innerHTML = `<img src="${avatarUrl}" alt="Foto de perfil">`;
+      preview.classList.add('has-photo-v17');
+    } else {
+      preview.textContent = displayName.charAt(0).toUpperCase();
+      preview.classList.remove('has-photo-v17');
+    }
+  }
+
+  const nameInput = document.getElementById('profile-display-name');
+  if (nameInput && document.activeElement !== nameInput) nameInput.value = profile.name || '';
+}
+
+function syncProfileControlsV17() {
+  applyProfileV17();
+}
+
+function saveProfileName(value) {
+  saveProfileV17({ name: (value || '').slice(0, 32) });
+}
+
+function handleProfilePhotoUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('Escolha uma imagem válida', 'error'); return; }
+  if (file.size > 2.5 * 1024 * 1024) { showToast('Imagem muito grande. Use até 2,5 MB.', 'error'); return; }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    saveProfileV17({ avatar: reader.result });
+    showToast('Foto de perfil atualizada!', 'success');
+  };
+  reader.onerror = () => showToast('Não consegui carregar a foto', 'error');
+  reader.readAsDataURL(file);
+}
+
+function removeProfilePhoto() {
+  saveProfileV17({ avatar: '' });
+  const input = document.getElementById('profile-photo-input');
+  if (input) input.value = '';
+  showToast('Foto removida', 'success');
+}
+
+function copyMonthlySummaryV17() {
+  const txs = (allTransactions || []).filter(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+  });
+  const income = txs.filter(t => t.type === 'income' && t.status === 'paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const expenses = txs.filter(t => t.type === 'expense' && t.status === 'paid').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const pending = txs.filter(t => t.status === 'pending').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const balance = income - expenses;
+  const monthLabel = document.querySelector('.month-label')?.textContent || 'mês atual';
+  const text = `Resumo Cyano - ${monthLabel}\nReceitas: ${formatCurrency(income)}\nDespesas pagas: ${formatCurrency(expenses)}\nPendentes: ${formatCurrency(pending)}\nSaldo do mês: ${formatCurrency(balance)}`;
+  navigator.clipboard?.writeText(text).then(() => showToast('Resumo copiado!', 'success')).catch(() => {
+    prompt('Copie seu resumo:', text);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+  applyProfileV17();
+});

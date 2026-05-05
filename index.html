@@ -109,7 +109,7 @@ catch(e){}
       <div class="sidebar-logo">
         <div class="sidebar-logo-icon">💰</div>
         <div>
-          <div class="sidebar-logo-text">Controle Financeiro</div>
+          <div class="sidebar-logo-text">Cyano</div>
           <div class="sidebar-logo-sub">Premium</div>
         </div>
       </div>
@@ -171,12 +171,14 @@ catch(e){}
           <div class="user-email" id="user-email">email@email.com</div>
         </div>
       </div>
+      <button class="btn-icon-sm sidebar-settings-shortcut" onclick="navigateTo('settings')">⚙️ Configurações</button>
       <div class="sidebar-actions">
         <button class="btn-icon-sm" id="theme-btn" onclick="toggleTheme()">🌙</button>
         <button class="btn-icon-sm" onclick="handleLogout()">Sair</button>
       </div>
     </div>
   </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <!-- MAIN -->
   <div class="main-content">
@@ -718,7 +720,7 @@ catch(e){}
         <div class="settings-hero">
           <div class="app-icon-preview">💰</div>
           <div>
-            <div class="settings-hero-title">Controle Financeiro</div>
+            <div class="settings-hero-title" id="settings-app-name-title">Cyano</div>
             <div class="settings-hero-sub">Modo app, lançamento rápido e controle seguro dos seus dados.</div>
           </div>
         </div>
@@ -771,6 +773,30 @@ catch(e){}
               <button class="btn-add" onclick="toggleTheme()">🌙 Alternar claro/escuro</button>
               <button class="btn-secondary" onclick="resetAppearanceV11()">↩️ Restaurar padrão</button>
             </div>
+          </div>
+
+          <div class="section-card profile-settings-card-v17">
+            <div class="settings-card-icon">👤</div>
+            <div class="section-title">Perfil</div>
+            <p class="settings-text">Personalize sua foto e o nome que aparece no app. Fica salvo neste aparelho.</p>
+            <div class="profile-editor-v17">
+              <div class="profile-photo-preview-v17" id="profile-photo-preview">U</div>
+              <div class="profile-editor-actions-v17">
+                <label class="btn-add full-width profile-upload-btn-v17">📷 Escolher foto
+                  <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="handleProfilePhotoUpload(event)">
+                </label>
+                <button class="btn-secondary full-width" onclick="removeProfilePhoto()">Remover foto</button>
+              </div>
+            </div>
+            <label class="settings-mini-label-v17">Nome no app</label>
+            <input type="text" id="profile-display-name" class="form-input" placeholder="Ex: João" oninput="saveProfileName(this.value)">
+          </div>
+
+          <div class="section-card surprise-card-v17">
+            <div class="settings-card-icon">✨</div>
+            <div class="section-title">Resumo instantâneo</div>
+            <p class="settings-text">Gere um resumo do mês em texto para copiar e mandar no WhatsApp ou guardar.</p>
+            <button class="btn-add full-width" onclick="copyMonthlySummaryV17()">📋 Copiar resumo do mês</button>
           </div>
 
           <div class="section-card">
