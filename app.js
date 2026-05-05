@@ -207,7 +207,7 @@ function navigateTo(page) {
   const titleMap = {
     dashboard: 'Dashboard', transactions: 'Lançamentos', bills: 'Contas a Pagar',
     cards: 'Cartões', categories: 'Categorias', budgets: 'Metas e Orçamentos',
-    reports: 'Relatórios', calendar: 'Calendário', insights: 'Insights', recurring: 'Recorrências', 'import-history': 'Importações', settings: 'Configurações'
+    reports: 'Relatórios', calendar: 'Calendário', insights: 'Insights', recurring: 'Recorrências', subscriptions: 'Assinaturas', 'import-history': 'Importações', settings: 'Configurações'
   };
   const titleEl = document.querySelector('.page-title');
   if (titleEl) titleEl.textContent = titleMap[page] || 'Controle Financeiro';
@@ -224,6 +224,7 @@ function navigateTo(page) {
     case 'calendar': renderCalendar(); break;
     case 'insights': renderInsights(); break;
     case 'recurring': renderRecurring(); break;
+    case 'subscriptions': renderSubscriptions(); break;
     case 'import-history': renderImportHistory(); break;
     case 'settings': renderSettings(); break;
   }
@@ -2602,8 +2603,439 @@ function renderCurrentPage() {
     case 'calendar': return renderCalendar();
     case 'insights': return renderInsights();
     case 'recurring': return renderRecurring();
+    case 'subscriptions': return renderSubscriptions();
     case 'import-history': return renderImportHistory();
     case 'settings': return renderSettings();
     default: return renderDashboard();
   }
 }
+
+// ============================================================
+// V15: INTELIGÊNCIA AVANÇADA, APRENDIZADO E PREVISÕES
+// ============================================================
+const CYANO_RULES_V15_KEY = 'cyano_category_rules_v15';
+
+function normalizeTextV15(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getCategoryRulesV15() {
+  try { return JSON.parse(localStorage.getItem(CYANO_RULES_V15_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function saveCategoryRulesV15(rules) {
+  localStorage.setItem(CYANO_RULES_V15_KEY, JSON.stringify(rules || {}));
+}
+
+function learnCategoryRuleV15(description, categoryId) {
+  if (!description || !categoryId) return;
+  const cat = allCategories.find(c => c.id === categoryId);
+  if (!cat) return;
+  const words = normalizeTextV15(description).split(' ').filter(w => w.length >= 3 && !/^\d+$/.test(w));
+  if (!words.length) return;
+  const rules = getCategoryRulesV15();
+  words.slice(0, 4).forEach(word => { rules[word] = categoryId; });
+  saveCategoryRulesV15(rules);
+}
+
+function guessCategoryIdV15(description) {
+  const clean = normalizeTextV15(description);
+  if (!clean) return null;
+  const rules = getCategoryRulesV15();
+  const words = clean.split(' ').filter(Boolean);
+  for (const word of words) {
+    if (rules[word] && allCategories.some(c => c.id === rules[word])) return rules[word];
+  }
+  const builtins = [
+    [['uber','99','taxi','combustivel','posto','gasolina'], ['Transporte','Combustível']],
+    [['ifood','restaurante','lanche','pizza','almoco','jantar','padaria'], ['Alimentação']],
+    [['mercado','supermercado','atacadao','assai','carrefour'], ['Mercado','Alimentação']],
+    [['netflix','spotify','prime','disney','assinatura'], ['Assinaturas','Lazer']],
+    [['farmacia','drogaria','medico','saude'], ['Saúde']],
+    [['academia','gym'], ['Academia','Saúde']],
+    [['faculdade','curso','livro','educacao'], ['Educação']],
+    [['energia','cemig','equatorial'], ['Energia']],
+    [['agua','saneago'], ['Água']],
+    [['internet','vivo','claro','tim'], ['Internet']],
+  ];
+  for (const [keys, cats] of builtins) {
+    if (keys.some(k => clean.includes(k))) {
+      const found = allCategories.find(c => cats.some(name => normalizeTextV15(c.name).includes(normalizeTextV15(name))));
+      if (found) return found.id;
+    }
+  }
+  return null;
+}
+
+function applyCategorySuggestionV15() {
+  const descEl = document.getElementById('tx-description');
+  const catEl = document.getElementById('tx-category');
+  if (!descEl || !catEl || catEl.value) return;
+  const guessed = guessCategoryIdV15(descEl.value);
+  if (guessed) {
+    catEl.value = guessed;
+    const cat = allCategories.find(c => c.id === guessed);
+    showToast(`Categoria sugerida: ${cat?.name || 'categoria'}`, 'success');
+  }
+}
+
+(function installSmartCategoryHookV15(){
+  document.addEventListener('input', (e) => {
+    if (e.target && e.target.id === 'tx-description') {
+      clearTimeout(window.__cyanoSuggestTimerV15);
+      window.__cyanoSuggestTimerV15 = setTimeout(applyCategorySuggestionV15, 450);
+    }
+  });
+
+  if (typeof saveTransaction === 'function' && !window.__saveTransactionWrappedV15) {
+    const originalSaveTransaction = saveTransaction;
+    window.__saveTransactionWrappedV15 = true;
+    saveTransaction = async function(e) {
+      const desc = document.getElementById('tx-description')?.value || '';
+      const cat = document.getElementById('tx-category')?.value || '';
+      learnCategoryRuleV15(desc, cat);
+      return originalSaveTransaction(e);
+    };
+  }
+})();
+
+function getMonthTxsV15(monthOffset = 0) {
+  const base = new Date(currentYear, currentMonth - 1 + monthOffset, 1);
+  const m = base.getMonth() + 1;
+  const y = base.getFullYear();
+  return allTransactions.filter(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    return d.getMonth() + 1 === m && d.getFullYear() === y;
+  });
+}
+
+function sumTxsV15(txs, type, paidOnly = true) {
+  return txs.filter(t => t.type === type && (!paidOnly || t.status === 'paid'))
+    .reduce((s,t)=>s+parseFloat(t.amount||0),0);
+}
+
+function renderMonthlyComparisonV15() {
+  const el = document.getElementById('monthly-comparison-v15');
+  if (!el) return;
+  const curr = getMonthTxsV15(0);
+  const prev = getMonthTxsV15(-1);
+  const currExp = sumTxsV15(curr, 'expense', true);
+  const prevExp = sumTxsV15(prev, 'expense', true);
+  const currInc = sumTxsV15(curr, 'income', true);
+  const prevInc = sumTxsV15(prev, 'income', true);
+  const diffExp = currExp - prevExp;
+  const diffInc = currInc - prevInc;
+  const byCat = {};
+  curr.filter(t=>t.type==='expense').forEach(t=>{ const n=t.categories?.name||'Outros'; byCat[n]=(byCat[n]||0)+parseFloat(t.amount||0); });
+  const prevByCat = {};
+  prev.filter(t=>t.type==='expense').forEach(t=>{ const n=t.categories?.name||'Outros'; prevByCat[n]=(prevByCat[n]||0)+parseFloat(t.amount||0); });
+  const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([name,val])=>{
+    const p = prevByCat[name] || 0;
+    const d = val-p;
+    return `<div class="v15-compare-row"><span>${name}</span><strong class="${d>0?'negative':'positive'}">${d>=0?'+':''}${formatCurrency(d)}</strong></div>`;
+  }).join('') || '<div class="empty-mini">Sem dados suficientes ainda</div>';
+  el.innerHTML = `
+    <div class="v15-compare-row"><span>Despesas vs mês anterior</span><strong class="${diffExp>0?'negative':'positive'}">${diffExp>=0?'+':''}${formatCurrency(diffExp)}</strong></div>
+    <div class="v15-compare-row"><span>Receitas vs mês anterior</span><strong class="${diffInc>=0?'positive':'negative'}">${diffInc>=0?'+':''}${formatCurrency(diffInc)}</strong></div>
+    <div class="v15-mini-title">Categorias que mais mudaram</div>
+    ${catRows}
+  `;
+}
+
+function renderCardLimitIntelligenceV15() {
+  const el = document.getElementById('card-limit-intelligence-v15');
+  if (!el) return;
+  if (!allCards.length) { el.innerHTML = emptyState('Cadastre um cartão para ver análise de limite', '💳'); return; }
+  const today = new Date();
+  el.innerHTML = allCards.map(card => {
+    const start = getCardPeriodStart(card, today);
+    const end = getCardPeriodEnd(card, today);
+    const used = allTransactions.filter(t => t.credit_card_id === card.id && t.type === 'expense' && t.date >= start && t.date <= end)
+      .reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const limit = parseFloat(card.credit_limit||0);
+    const pct = limit > 0 ? Math.min(100, Math.round((used/limit)*100)) : 0;
+    const status = pct >= 85 ? 'danger' : pct >= 65 ? 'warning' : 'success';
+    const msg = pct >= 85 ? 'Atenção: limite bem alto' : pct >= 65 ? 'Controle recomendado' : 'Limite confortável';
+    return `<div class="v15-card-limit ${status}">
+      <div><strong>${card.name}</strong><span>${msg}</span></div>
+      <div class="v15-limit-meter"><i style="width:${pct}%"></i></div>
+      <b>${pct}% · ${formatCurrency(used)} de ${formatCurrency(limit)}</b>
+    </div>`;
+  }).join('');
+}
+
+// Override seguro do renderInsights existente com blocos extras V15.
+if (typeof renderInsights === 'function') {
+  const renderInsightsBaseV15 = renderInsights;
+  renderInsights = function() {
+    renderInsightsBaseV15();
+    renderMonthlyComparisonV15();
+    renderCardLimitIntelligenceV15();
+  };
+}
+
+// Reforça atualização dos cards inteligentes quando a página atual for Insights.
+(function wrapRenderCurrentPageV15(){
+  if (typeof renderCurrentPage === 'function' && !window.__renderCurrentWrappedV15) {
+    const oldRenderCurrentPage = renderCurrentPage;
+    window.__renderCurrentWrappedV15 = true;
+    renderCurrentPage = function(){
+      const r = oldRenderCurrentPage();
+      if (currentPage === 'insights') { renderMonthlyComparisonV15(); renderCardLimitIntelligenceV15(); }
+      return r;
+    };
+  }
+})();
+
+
+// ============================================================
+// V16.1 - ASSINATURAS INTELIGENTES (localStorage + lançamentos)
+// ============================================================
+const CYANO_SUBSCRIPTIONS_KEY = 'cyano_subscriptions_v16';
+
+function getSubscriptionsKey(){
+  return `${CYANO_SUBSCRIPTIONS_KEY}_${currentUser?.id || 'local'}`;
+}
+function loadSubscriptions(){
+  try { return JSON.parse(localStorage.getItem(getSubscriptionsKey()) || '[]'); }
+  catch(e){ return []; }
+}
+function saveSubscriptions(list){
+  localStorage.setItem(getSubscriptionsKey(), JSON.stringify(list || []));
+}
+function subscriptionTemplates(){
+  return {
+    'Netflix': { amount: '39,90', icon:'🎬' },
+    'Spotify': { amount: '21,90', icon:'🎵' },
+    'YouTube Premium': { amount: '24,90', icon:'▶️' },
+    'Amazon Prime': { amount: '19,90', icon:'📦' },
+    'Disney+': { amount: '33,90', icon:'🏰' },
+    'Max': { amount: '34,90', icon:'🎞️' },
+    'iCloud': { amount: '4,90', icon:'☁️' },
+    'Google One': { amount: '6,99', icon:'☁️' },
+    'Canva': { amount: '34,90', icon:'🎨' },
+    'ChatGPT': { amount: '110,00', icon:'🤖' },
+    'Academia': { amount: '99,90', icon:'🏋️' },
+    'Internet': { amount: '99,90', icon:'🌐' },
+    'Celular': { amount: '49,90', icon:'📱' },
+    'Energia': { amount: '150,00', icon:'💡' },
+    'Água': { amount: '80,00', icon:'💧' },
+    'Aluguel': { amount: '1200,00', icon:'🏠' }
+  };
+}
+function getSubscriptionIcon(name){
+  const t = subscriptionTemplates()[name];
+  if (t?.icon) return t.icon;
+  const s = String(name||'').toLowerCase();
+  if (s.includes('netflix') || s.includes('disney') || s.includes('max')) return '🎬';
+  if (s.includes('spotify') || s.includes('music')) return '🎵';
+  if (s.includes('icloud') || s.includes('google')) return '☁️';
+  if (s.includes('academ')) return '🏋️';
+  return '🔁';
+}
+function openSubscriptionForm(id=null){
+  const form = document.getElementById('subscription-form-card');
+  if (!form) return;
+  const subs = loadSubscriptions();
+  const sub = id ? subs.find(s=>s.id===id) : null;
+  document.getElementById('subscription-form-title').textContent = sub ? 'Editar assinatura' : 'Nova assinatura';
+  document.getElementById('sub-id').value = sub?.id || '';
+  document.getElementById('sub-template').value = '';
+  document.getElementById('sub-name').value = sub?.name || '';
+  document.getElementById('sub-amount').value = sub ? formatAmountInput(sub.amount) : '';
+  document.getElementById('sub-day').value = sub?.day || 5;
+  document.getElementById('sub-payment').value = sub?.payment_method || 'credit_card';
+  document.getElementById('sub-status').value = sub?.status || 'active';
+  document.getElementById('sub-notes').value = sub?.notes || '';
+  populateSubscriptionCards(sub?.credit_card_id || '');
+  toggleSubscriptionCardField();
+  form.classList.remove('hidden');
+  setTimeout(()=>document.getElementById('sub-name')?.focus(), 80);
+}
+function closeSubscriptionForm(){
+  const form = document.getElementById('subscription-form-card');
+  if (form) form.classList.add('hidden');
+}
+function applySubscriptionTemplate(){
+  const name = document.getElementById('sub-template')?.value;
+  if (!name) return;
+  const t = subscriptionTemplates()[name] || {};
+  document.getElementById('sub-name').value = name;
+  if (!document.getElementById('sub-amount').value && t.amount) document.getElementById('sub-amount').value = t.amount;
+}
+function populateSubscriptionCards(selected=''){
+  const sel = document.getElementById('sub-card');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Selecione o cartão</option>' + allCards.map(c=>`<option value="${c.id}" ${c.id===selected?'selected':''}>${c.name}</option>`).join('');
+}
+function toggleSubscriptionCardField(){
+  const wrap = document.getElementById('sub-card-wrap');
+  const payment = document.getElementById('sub-payment')?.value;
+  if (wrap) wrap.style.display = payment === 'credit_card' ? 'block' : 'none';
+}
+function normalizeSubName(name){
+  return String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+}
+async function saveSubscriptionFromForm(){
+  const id = document.getElementById('sub-id').value;
+  const name = document.getElementById('sub-name').value.trim();
+  const amount = parseCurrency(document.getElementById('sub-amount').value);
+  const day = Math.min(28, Math.max(1, parseInt(document.getElementById('sub-day').value || '5', 10)));
+  const payment_method = document.getElementById('sub-payment').value;
+  const credit_card_id = payment_method === 'credit_card' ? (document.getElementById('sub-card').value || null) : null;
+  const status = document.getElementById('sub-status').value;
+  const notes = document.getElementById('sub-notes').value.trim();
+  if (!name || !amount) { showToast('Informe nome e valor da assinatura', 'error'); return; }
+  let subs = loadSubscriptions();
+  const duplicate = subs.find(s => s.id !== id && normalizeSubName(s.name) === normalizeSubName(name));
+  if (duplicate && !confirm('Já existe uma assinatura com esse nome. Quer salvar mesmo assim?')) return;
+  const now = new Date().toISOString();
+  const payload = { id: id || crypto.randomUUID(), name, amount, day, payment_method, credit_card_id, status, notes, updated_at: now, created_at: id ? (subs.find(s=>s.id===id)?.created_at || now) : now, last_generated_month: null };
+  if (id) subs = subs.map(s=>s.id===id ? { ...s, ...payload, last_generated_month: s.last_generated_month || null } : s);
+  else subs.unshift(payload);
+  saveSubscriptions(subs);
+  closeSubscriptionForm();
+  showToast(id ? 'Assinatura atualizada!' : 'Assinatura criada!', 'success');
+  await generateSubscriptionForCurrentMonth(payload, {silent:true});
+  renderSubscriptions();
+  if (currentPage === 'cards') renderCards();
+}
+function subscriptionMonthKey(year=currentYear, month=currentMonth){
+  return `${year}-${String(month).padStart(2,'0')}`;
+}
+function subscriptionChargeDate(sub, year=currentYear, month=currentMonth){
+  const d = new Date(year, month - 1, Math.min(28, sub.day || 5));
+  return d.toISOString().split('T')[0];
+}
+function subscriptionExists(sub, monthKey){
+  return allTransactions.some(t => String(t.notes||'').includes(`[SUBSCRIPTION_ID:${sub.id}]`) && String(t.notes||'').includes(`[SUB_MONTH:${monthKey}]`));
+}
+async function generateSubscriptionForCurrentMonth(sub, opts={}){
+  if (!sub || sub.status !== 'active') return {created:0, skipped:0};
+  const monthKey = subscriptionMonthKey();
+  if (subscriptionExists(sub, monthKey)) return {created:0, skipped:1};
+  const row = {
+    user_id: currentUser.id,
+    type: 'expense',
+    description: `${sub.name} (Assinatura)`,
+    amount: Number(sub.amount || 0),
+    date: subscriptionChargeDate(sub),
+    category_id: guessSubscriptionCategoryId(sub.name),
+    status: 'pending',
+    payment_method: sub.payment_method || 'pix',
+    credit_card_id: sub.payment_method === 'credit_card' ? (sub.credit_card_id || null) : null,
+    notes: `[SOURCE:subscription] [SUBSCRIPTION_ID:${sub.id}] [SUB_MONTH:${monthKey}] ${sub.notes || ''}`.trim()
+  };
+  const { error } = await db.from('transactions').insert(row);
+  if (error) { console.error(error); if(!opts.silent) showToast('Erro ao gerar cobrança', 'error'); return {created:0, skipped:0, error}; }
+  await loadTransactions();
+  if(!opts.silent) showToast('Cobrança da assinatura gerada!', 'success');
+  return {created:1, skipped:0};
+}
+function guessSubscriptionCategoryId(name){
+  const s = normalizeSubName(name);
+  const findCat = words => allCategories.find(c => words.some(w => normalizeSubName(c.name).includes(w)));
+  let cat = null;
+  if (/(netflix|spotify|youtube|prime|disney|max|canva|chatgpt)/.test(s)) cat = findCat(['assinatura','lazer','educacao','outros']);
+  if (/(academ)/.test(s)) cat = findCat(['academia','saude','outros']);
+  if (/(internet|celular|icloud|google)/.test(s)) cat = findCat(['internet','assinatura','outros']);
+  if (/(energia|agua|aluguel)/.test(s)) cat = findCat(['moradia','energia','agua','outros']);
+  return cat?.id || getOutrosCategoryId?.() || null;
+}
+async function generateAllSubscriptionsForCurrentMonth(){
+  const subs = loadSubscriptions().filter(s=>s.status==='active');
+  let created=0, skipped=0;
+  for (const sub of subs) {
+    const res = await generateSubscriptionForCurrentMonth(sub, {silent:true});
+    created += res.created || 0; skipped += res.skipped || 0;
+  }
+  showToast(`Assinaturas: ${created} criada(s), ${skipped} já existiam`, 'success');
+  await loadTransactions();
+  renderSubscriptions();
+  renderCurrentPage();
+}
+function toggleSubscriptionStatus(id){
+  const subs = loadSubscriptions().map(s => s.id === id ? { ...s, status: s.status === 'active' ? 'paused' : 'active' } : s);
+  saveSubscriptions(subs); renderSubscriptions();
+}
+function deleteSubscription(id){
+  if (!confirm('Excluir esta assinatura? Os lançamentos já criados continuam salvos.')) return;
+  saveSubscriptions(loadSubscriptions().filter(s=>s.id!==id));
+  showToast('Assinatura excluída!', 'success');
+  renderSubscriptions();
+}
+function renderSubscriptions(){
+  const subs = loadSubscriptions();
+  const active = subs.filter(s=>s.status==='active');
+  const total = active.reduce((sum,s)=>sum+Number(s.amount||0),0);
+  const monthEl=document.getElementById('subs-total-month'); if(monthEl) monthEl.textContent=formatCurrency(total);
+  const yearEl=document.getElementById('subs-total-year'); if(yearEl) yearEl.textContent=formatCurrency(total*12);
+  const countEl=document.getElementById('subs-active-count'); if(countEl) countEl.textContent=String(active.length);
+  renderSubscriptionAlerts(subs);
+  const list=document.getElementById('subscriptions-list');
+  if(!list) return;
+  if(!subs.length){ list.innerHTML = emptyState('Nenhuma assinatura cadastrada', '📺'); return; }
+  const sorted = [...subs].sort((a,b)=> (a.status==='active'?0:1) - (b.status==='active'?0:1) || Number(b.amount||0)-Number(a.amount||0));
+  list.innerHTML = sorted.map(sub=>{
+    const card = allCards.find(c=>c.id===sub.credit_card_id);
+    const monthKey = subscriptionMonthKey();
+    const generated = subscriptionExists(sub, monthKey);
+    return `<div class="subscription-row ${sub.status==='paused'?'paused':''}">
+      <div class="subscription-icon">${getSubscriptionIcon(sub.name)}</div>
+      <div class="subscription-info">
+        <div class="subscription-name">${sub.name}</div>
+        <div class="subscription-meta">${formatCurrency(sub.amount)} · dia ${sub.day || 5} · ${paymentLabel(sub.payment_method||'pix')}${card ? ' · '+card.name : ''}</div>
+        <div class="subscription-badges"><span class="badge ${sub.status==='active'?'badge-paid':'badge-pending'}">${sub.status==='active'?'Ativa':'Pausada'}</span>${generated?'<span class="badge badge-paid">Gerada este mês</span>':'<span class="badge badge-pending">Ainda não gerada</span>'}</div>
+      </div>
+      <div class="subscription-actions">
+        <button class="btn-icon" title="Editar" onclick="openSubscriptionForm('${sub.id}')">✏️</button>
+        <button class="btn-icon" title="Pausar/ativar" onclick="toggleSubscriptionStatus('${sub.id}')">${sub.status==='active'?'⏸️':'▶️'}</button>
+        <button class="btn-icon" title="Gerar agora" onclick="generateSubscriptionForCurrentMonth(loadSubscriptions().find(s=>s.id==='${sub.id}')).then(()=>renderSubscriptions())">➕</button>
+        <button class="btn-icon" title="Excluir" onclick="deleteSubscription('${sub.id}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderSubscriptionAlerts(subs){
+  const el=document.getElementById('subs-alerts'); if(!el) return;
+  const active=subs.filter(s=>s.status==='active');
+  const total=active.reduce((sum,s)=>sum+Number(s.amount||0),0);
+  const top=[...active].sort((a,b)=>Number(b.amount||0)-Number(a.amount||0)).slice(0,3);
+  const alerts=[];
+  if(total>300) alerts.push(`⚠️ Você está gastando ${formatCurrency(total)}/mês em assinaturas.`);
+  if(top.length) alerts.push(`🔥 Mais caras: ${top.map(s=>`${s.name} (${formatCurrency(s.amount)})`).join(', ')}`);
+  const possible = detectPossibleSubscriptions();
+  if(possible.length) alerts.push(`💡 Detectei possíveis assinaturas pelos lançamentos: ${possible.slice(0,3).map(p=>p.name).join(', ')}.`);
+  el.innerHTML = alerts.length ? alerts.map(a=>`<div class="subscription-alert">${a}</div>`).join('') : '<div class="subscription-alert good">✅ Tudo certo. Nenhum alerta de assinatura agora.</div>';
+}
+function detectPossibleSubscriptions(){
+  const map = {};
+  allTransactions.filter(t=>t.type==='expense').forEach(t=>{
+    const name = normalizeSubName(t.description).replace(/ assinatura/g,'').slice(0,30);
+    const amount = Number(t.amount||0).toFixed(2);
+    const key = `${name}|${amount}`;
+    map[key] = map[key] || {name:t.description.replace(/\s*\(Assinatura\)/i,''), amount:Number(t.amount||0), count:0};
+    map[key].count++;
+  });
+  return Object.values(map).filter(x=>x.count>=2 && !loadSubscriptions().some(s=>normalizeSubName(s.name)===normalizeSubName(x.name)));
+}
+
+// Adiciona Assinaturas aos menus dinâmicos sem depender da versão original
+(function ensureSubscriptionsNavigation(){
+  try {
+    const oldNavigate = navigateTo;
+    if (!window.__subsNavWrapped) {
+      window.__subsNavWrapped = true;
+      navigateTo = function(page){
+        oldNavigate(page);
+        if (page === 'subscriptions') renderSubscriptions();
+      };
+    }
+  } catch(e) { console.warn('subs nav wrapper failed', e); }
+})();

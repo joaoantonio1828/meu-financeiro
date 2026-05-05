@@ -155,6 +155,9 @@ catch(e){}
       <div class="nav-item" data-page="recurring" onclick="navigateTo('recurring')">
         <span class="nav-icon">🔁</span> Recorrências
       </div>
+      <div class="nav-item" data-page="subscriptions" onclick="navigateTo('subscriptions')">
+        <span class="nav-icon">📺</span> Assinaturas
+      </div>
       <div class="nav-item" data-page="settings" onclick="navigateTo('settings')">
         <span class="nav-icon">⚙️</span> Configurações
       </div>
@@ -488,6 +491,216 @@ catch(e){}
         </div>
         <div class="section-card">
           <div id="pending-review-list"></div>
+        </div>
+      </div>
+
+
+
+      <!-- ========================
+           PAGE: CALENDAR
+      ======================== -->
+      <div id="page-calendar" class="page hidden">
+        <div class="section-header" style="margin-bottom:16px">
+          <div>
+            <div class="section-title">🗓️ Calendário financeiro</div>
+            <div class="section-subtitle month-label">Mês atual</div>
+          </div>
+          <div class="month-nav">
+            <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
+            <span class="month-label">Mês</span>
+            <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
+          </div>
+        </div>
+        <div class="v15-kpi-grid">
+          <div class="v15-kpi"><span>Entradas</span><strong id="cal-income">R$ 0,00</strong></div>
+          <div class="v15-kpi"><span>Saídas pagas</span><strong id="cal-expenses">R$ 0,00</strong></div>
+          <div class="v15-kpi"><span>Pendências</span><strong id="cal-pending">R$ 0,00</strong></div>
+        </div>
+        <div class="section-card">
+          <div id="finance-calendar"></div>
+        </div>
+      </div>
+
+      <!-- ========================
+           PAGE: INSIGHTS
+      ======================== -->
+      <div id="page-insights" class="page hidden">
+        <div class="section-header" style="margin-bottom:16px">
+          <div>
+            <div class="section-title">🧠 Inteligência financeira</div>
+            <div class="section-subtitle">Previsão, comparação mensal e sugestões automáticas</div>
+          </div>
+        </div>
+        <div class="v15-kpi-grid">
+          <div class="v15-kpi hero"><span>Previsão final do mês</span><strong id="ins-projected">R$ 0,00</strong></div>
+          <div class="v15-kpi"><span>Dinheiro comprometido</span><strong id="ins-committed">R$ 0,00</strong></div>
+          <div class="v15-kpi"><span>Maior categoria</span><strong id="ins-top-cat">-</strong></div>
+        </div>
+        <div class="v15-insight-layout">
+          <div class="section-card">
+            <div class="section-title">Resumo inteligente</div>
+            <div id="insights-list" class="v15-insights-list"></div>
+          </div>
+          <div class="section-card">
+            <div class="section-title">Comparação com mês anterior</div>
+            <div id="monthly-comparison-v15"></div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-title">💳 Limite inteligente dos cartões</div>
+          <div id="card-limit-intelligence-v15"></div>
+        </div>
+      </div>
+
+      <!-- ========================
+           PAGE: RECURRING
+      ======================== -->
+      <div id="page-recurring" class="page hidden">
+        <div class="section-header" style="margin-bottom:16px">
+          <div>
+            <div class="section-title">🔁 Recorrências</div>
+            <div class="section-subtitle">Despesas fixas mensais, como internet, academia e aluguel</div>
+          </div>
+          <button class="btn-add" onclick="openRecurringForm()">+ Nova recorrência</button>
+        </div>
+        <div class="section-card hidden" id="recurring-form-card">
+          <div class="section-title">Nova recorrência</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Descrição</label><input id="rec-desc" class="form-input" placeholder="Ex: Internet" /></div>
+            <div class="form-group"><label class="form-label">Valor</label><input id="rec-amount" class="form-input currency-input" inputmode="numeric" placeholder="0,00" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Dia do mês</label><input id="rec-day" class="form-input" type="number" min="1" max="28" value="5" /></div>
+            <div class="form-group"><label class="form-label">Pagamento</label><select id="rec-payment" class="form-input"><option value="pix">PIX</option><option value="credit_card">Cartão crédito</option><option value="money">Dinheiro</option><option value="boleto">Boleto</option><option value="transfer">Transferência</option></select></div>
+          </div>
+          <div class="modal-footer"><button class="btn-secondary" onclick="closeRecurringForm()">Cancelar</button><button class="btn-primary" onclick="saveRecurringFromForm()">Salvar recorrência</button></div>
+        </div>
+        <div class="section-card"><div id="recurring-list"></div></div>
+      </div>
+
+
+      <!-- ========================
+           PAGE: SUBSCRIPTIONS
+      ======================== -->
+      <div id="page-subscriptions" class="page hidden">
+        <div class="section-header" style="margin-bottom:16px">
+          <div>
+            <div class="section-title">📺 Assinaturas</div>
+            <div class="section-subtitle">Streaming, internet, academia, apps e cobranças mensais no cartão ou PIX</div>
+          </div>
+          <button class="btn-add" onclick="openSubscriptionForm()">+ Nova assinatura</button>
+        </div>
+
+        <div class="subs-summary-grid">
+          <div class="dash-card subs-glass-card">
+            <div class="card-icon">💳</div>
+            <div class="card-label">Total mensal</div>
+            <div class="card-value" id="subs-total-month">R$ 0,00</div>
+          </div>
+          <div class="dash-card subs-glass-card">
+            <div class="card-icon">📆</div>
+            <div class="card-label">Total anual</div>
+            <div class="card-value" id="subs-total-year">R$ 0,00</div>
+          </div>
+          <div class="dash-card subs-glass-card">
+            <div class="card-icon">✅</div>
+            <div class="card-label">Ativas</div>
+            <div class="card-value" id="subs-active-count">0</div>
+          </div>
+        </div>
+
+        <div class="section-card hidden" id="subscription-form-card">
+          <div class="section-header">
+            <div>
+              <div class="section-title" id="subscription-form-title">Nova assinatura</div>
+              <div class="section-subtitle">Escolha um serviço comum ou preencha manualmente</div>
+            </div>
+          </div>
+          <input type="hidden" id="sub-id" />
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Serviço comum</label>
+              <select id="sub-template" class="form-input" onchange="applySubscriptionTemplate()">
+                <option value="">Escolher...</option>
+                <option value="Netflix">Netflix</option>
+                <option value="Spotify">Spotify</option>
+                <option value="YouTube Premium">YouTube Premium</option>
+                <option value="Amazon Prime">Amazon Prime</option>
+                <option value="Disney+">Disney+</option>
+                <option value="Max">Max</option>
+                <option value="iCloud">iCloud</option>
+                <option value="Google One">Google One</option>
+                <option value="Canva">Canva</option>
+                <option value="ChatGPT">ChatGPT</option>
+                <option value="Academia">Academia</option>
+                <option value="Internet">Internet</option>
+                <option value="Celular">Celular</option>
+                <option value="Energia">Energia</option>
+                <option value="Água">Água</option>
+                <option value="Aluguel">Aluguel</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nome *</label>
+              <input id="sub-name" class="form-input" placeholder="Ex: Netflix" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Valor mensal *</label>
+              <input id="sub-amount" class="form-input currency-input" inputmode="numeric" placeholder="0,00" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Dia de cobrança</label>
+              <input id="sub-day" class="form-input" type="number" min="1" max="28" value="5" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Forma de pagamento</label>
+              <select id="sub-payment" class="form-input" onchange="toggleSubscriptionCardField()">
+                <option value="credit_card">Cartão crédito</option>
+                <option value="pix">PIX</option>
+                <option value="money">Dinheiro</option>
+                <option value="boleto">Boleto</option>
+                <option value="transfer">Transferência</option>
+              </select>
+            </div>
+            <div class="form-group" id="sub-card-wrap">
+              <label class="form-label">Cartão</label>
+              <select id="sub-card" class="form-input"><option value="">Selecione o cartão</option></select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="sub-status" class="form-input"><option value="active">Ativa</option><option value="paused">Pausada</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Observação</label>
+              <input id="sub-notes" class="form-input" placeholder="Opcional" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeSubscriptionForm()">Cancelar</button>
+            <button class="btn-primary" onclick="saveSubscriptionFromForm()">Salvar assinatura</button>
+          </div>
+        </div>
+
+        <div class="section-card subs-actions-card">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Automação mensal</div>
+              <div class="section-subtitle">Gera os lançamentos deste mês sem duplicar o que já existe</div>
+            </div>
+            <button class="btn-add" onclick="generateAllSubscriptionsForCurrentMonth()">Gerar cobranças deste mês</button>
+          </div>
+          <div id="subs-alerts"></div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-title" style="margin-bottom:16px">Minhas assinaturas</div>
+          <div id="subscriptions-list"></div>
         </div>
       </div>
 

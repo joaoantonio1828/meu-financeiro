@@ -2132,3 +2132,77 @@ body.cyano-dark .bottom-nav-v12 {
   .import-batch-actions .btn-secondary,
   .import-batch-actions .btn-danger { width: 100%; }
 }
+
+/* ============================================================
+   V15 - Inteligência financeira e páginas premium
+============================================================ */
+.v15-kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin-bottom:16px;
+}
+.v15-kpi{
+  padding:18px;
+  border-radius:24px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  backdrop-filter:blur(22px);
+  -webkit-backdrop-filter:blur(22px);
+  box-shadow:0 14px 36px rgba(0,0,0,.12);
+}
+.v15-kpi span{display:block;font-size:12px;color:var(--text-2);margin-bottom:8px;font-weight:700;letter-spacing:.02em}
+.v15-kpi strong{font-size:22px;color:var(--text-1)}
+.v15-kpi.hero{background:linear-gradient(135deg,rgba(0,122,255,.20),rgba(6,182,212,.12));}
+.v15-insight-layout{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-bottom:16px}
+.v15-insights-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.insight-row{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10)}
+.insight-row p{margin:0;font-size:14px;color:var(--text-1);line-height:1.4}
+.insight-row.danger{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.09)}
+.insight-row.warning{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.09)}
+.insight-row.success{border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.09)}
+.v15-compare-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.v15-compare-row:last-child{border-bottom:none}
+.v15-compare-row span{font-size:14px;color:var(--text-2)}
+.v15-compare-row strong{font-size:14px}
+.v15-mini-title{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-2);margin-top:16px;margin-bottom:4px;font-weight:800}
+.empty-mini{font-size:13px;color:var(--text-2);padding:10px 0}
+.v15-card-limit{display:grid;grid-template-columns:1fr 1fr auto;gap:14px;align-items:center;padding:14px;border-radius:20px;margin-top:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10)}
+.v15-card-limit div:first-child{display:flex;flex-direction:column;gap:4px}
+.v15-card-limit strong{font-size:15px;color:var(--text-1)}
+.v15-card-limit span{font-size:12px;color:var(--text-2)}
+.v15-card-limit b{font-size:13px;color:var(--text-1);white-space:nowrap}
+.v15-limit-meter{height:10px;border-radius:99px;background:rgba(255,255,255,.10);overflow:hidden}
+.v15-limit-meter i{display:block;height:100%;border-radius:99px;background:var(--success)}
+.v15-card-limit.warning .v15-limit-meter i{background:var(--warning)}
+.v15-card-limit.danger .v15-limit-meter i{background:var(--danger)}
+.calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:10px;font-size:12px;color:var(--text-2);font-weight:800;text-align:center}
+.calendar-grid-v13{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.calendar-day{min-height:82px;border-radius:18px;padding:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:5px;overflow:hidden}
+.calendar-day.empty{opacity:.25}
+.calendar-day.has-items{background:rgba(0,122,255,.08);border-color:rgba(0,122,255,.18)}
+.day-num{font-weight:800;font-size:13px;color:var(--text-1)}
+.day-pill{font-size:11px;border-radius:999px;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day-pill.in{background:rgba(16,185,129,.15);color:var(--success)}
+.day-pill.out{background:rgba(239,68,68,.13);color:var(--danger)}
+.day-dot{font-size:10px;color:var(--warning);font-weight:700}
+.recurring-actions{margin-bottom:12px}
+.recurring-row{display:flex;justify-content:space-between;align-items:center;padding:14px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);margin-bottom:10px}
+.recurring-row div{display:flex;flex-direction:column;gap:4px}
+.recurring-row span{font-size:13px;color:var(--text-2)}
+.positive{color:var(--success)!important}.negative{color:var(--danger)!important}
+@media(max-width:768px){
+  .v15-kpi-grid,.v15-insight-layout{grid-template-columns:1fr;gap:12px}
+  .v15-kpi{padding:16px;border-radius:22px}
+  .v15-card-limit{grid-template-columns:1fr;gap:10px}
+  .calendar-weekdays{gap:4px;font-size:10px}
+  .calendar-grid-v13{gap:5px}
+  .calendar-day{min-height:66px;border-radius:14px;padding:7px}
+  .day-pill{font-size:9px;padding:2px 4px}
+}
+
+
+/* ============================================================
+   V16.1 - ASSINATURAS
+============================================================ */
+.subs-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}.subs-glass-card{min-height:110px}.subscription-row{display:flex;align-items:center;gap:14px;padding:14px;border-radius:22px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);margin-bottom:10px;transition:transform .18s ease, background .18s ease}.subscription-row:hover{transform:translateY(-1px);background:rgba(255,255,255,.12)}.subscription-row.paused{opacity:.62}.subscription-icon{width:48px;height:48px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:23px;background:linear-gradient(135deg,rgba(14,165,233,.22),rgba(124,58,237,.18));box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}.subscription-info{flex:1;min-width:0}.subscription-name{font-weight:800;font-size:15px;letter-spacing:-.01em}.subscription-meta{font-size:12px;color:var(--text-2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.subscription-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.subscription-actions{display:flex;gap:6px;align-items:center}.subscription-alert{padding:12px 14px;border-radius:18px;background:rgba(245,158,11,.13);border:1px solid rgba(245,158,11,.22);font-size:13px;margin-bottom:8px}.subscription-alert.good{background:rgba(16,185,129,.13);border-color:rgba(16,185,129,.22)}.subs-actions-card{margin-bottom:16px}@media(max-width:768px){.subs-summary-grid{grid-template-columns:1fr;gap:10px}.subscription-row{align-items:flex-start}.subscription-actions{flex-direction:column}.subscription-meta{white-space:normal}.subscription-icon{width:44px;height:44px}}
