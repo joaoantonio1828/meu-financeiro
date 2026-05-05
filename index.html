@@ -776,6 +776,62 @@ catch(e){}
             </div>
           </div>
 
+
+
+          <div class="section-card personalization-total-card-v18">
+            <div class="settings-card-icon">🧩</div>
+            <div class="section-title">Personalização total</div>
+            <p class="settings-text">Ajuste o app do seu jeito: temas, vidro, tamanho, barra inferior, botão + e blocos do dashboard.</p>
+
+            <label class="settings-mini-label-v17">Temas prontos</label>
+            <div class="theme-presets-v18">
+              <button type="button" class="theme-preset-v18" data-theme-preset="ios-glass" onclick="setUIStyle('ios-glass')"><span></span>iOS Glass</button>
+              <button type="button" class="theme-preset-v18" data-theme-preset="cyano-dark" onclick="setUIStyle('cyano-dark')"><span></span>Cyano Dark</button>
+              <button type="button" class="theme-preset-v18" data-theme-preset="minimal-clean" onclick="setUIStyle('minimal-clean')"><span></span>Minimal Clean</button>
+              <button type="button" class="theme-preset-v18" data-theme-preset="black-pro" onclick="setUIStyle('black-pro')"><span></span>Black Pro</button>
+              <button type="button" class="theme-preset-v18" data-theme-preset="neon-flow" onclick="setUIStyle('neon-flow')"><span></span>Neon Flow</button>
+              <button type="button" class="theme-preset-v18" data-theme-preset="ocean-glass" onclick="setUIStyle('ocean-glass')"><span></span>Ocean Glass</button>
+              <button type="button" class="theme-preset-v18" data-theme-preset="sunset-glass" onclick="setUIStyle('sunset-glass')"><span></span>Sunset</button>
+            </div>
+
+            <div class="settings-slider-grid-v18">
+              <label>Transparência do vidro <input type="range" min="4" max="85" id="glass-alpha-range-v18" oninput="setGlassAlphaV18(this.value)"></label>
+              <label>Intensidade do blur <input type="range" min="8" max="46" id="glass-blur-range-v18" oninput="setGlassBlurV18(this.value)"></label>
+              <label>Tamanho da interface <input type="range" min="90" max="112" id="font-scale-range-v18" oninput="setFontScaleV18(this.value)"></label>
+            </div>
+
+            <label class="settings-mini-label-v17">Barra inferior no celular</label>
+            <select id="bottom-nav-style-v18" class="form-input" onchange="setBottomNavStyleV18(this.value)">
+              <option value="glass-pill">Vidro flutuante</option>
+              <option value="minimal">Minimalista</option>
+              <option value="compact">Compacta</option>
+            </select>
+
+            <label class="settings-mini-label-v17">Botão +</label>
+            <select id="fab-action-v18" class="form-input" onchange="setFabActionV18(this.value)">
+              <option value="quick-actions">Abrir ações rápidas</option>
+              <option value="expense">Nova despesa</option>
+              <option value="income">Nova receita</option>
+              <option value="quick-add">Lançamento rápido direto</option>
+              <option value="pending">Pendências</option>
+            </select>
+
+            <label class="settings-mini-label-v17">Blocos do dashboard</label>
+            <div class="dashboard-widget-grid-v18">
+              <label><input type="checkbox" data-widget-v18="balance" onchange="toggleDashboardWidgetV18('balance', this.checked)"> Saldo</label>
+              <label><input type="checkbox" data-widget-v18="income" onchange="toggleDashboardWidgetV18('income', this.checked)"> Receitas</label>
+              <label><input type="checkbox" data-widget-v18="expenses" onchange="toggleDashboardWidgetV18('expenses', this.checked)"> Despesas</label>
+              <label><input type="checkbox" data-widget-v18="pending" onchange="toggleDashboardWidgetV18('pending', this.checked)"> A pagar</label>
+              <label><input type="checkbox" data-widget-v18="overdue" onchange="toggleDashboardWidgetV18('overdue', this.checked)"> Vencidas</label>
+              <label><input type="checkbox" data-widget-v18="card" onchange="toggleDashboardWidgetV18('card', this.checked)"> Cartão</label>
+              <label><input type="checkbox" data-widget-v18="saving" onchange="toggleDashboardWidgetV18('saving', this.checked)"> Economia</label>
+              <label><input type="checkbox" data-widget-v18="chart" onchange="toggleDashboardWidgetV18('chart', this.checked)"> Gráfico</label>
+              <label><input type="checkbox" data-widget-v18="recent" onchange="toggleDashboardWidgetV18('recent', this.checked)"> Últimas transações</label>
+            </div>
+
+            <button class="btn-secondary full-width" onclick="resetPersonalizationV18()">↩️ Restaurar personalização</button>
+          </div>
+
           <div class="section-card profile-settings-card-v17">
             <div class="settings-card-icon">👤</div>
             <div class="section-title">Perfil</div>

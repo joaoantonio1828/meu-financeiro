@@ -3184,3 +3184,181 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
   applyProfileV17();
 });
+
+// ============================================================
+// V18 - PERSONALIZAÇÃO TOTAL
+// ============================================================
+const PERSONALIZATION_V18_KEY = 'cyano_personalization_v18';
+const UI_STYLE_CLASSES_V18 = ['ios-glass','cyano-dark','minimal-clean','black-pro','neon-flow','ocean-glass','sunset-glass'];
+const NAV_STYLE_CLASSES_V18 = ['nav-glass-pill','nav-minimal','nav-compact'];
+const DEFAULT_PERSONALIZATION_V18 = {
+  glassAlpha: 58,
+  glassBlur: 28,
+  fontScale: 100,
+  bottomNavStyle: 'glass-pill',
+  fabAction: 'quick-actions',
+  widgets: {
+    balance:true, income:true, expenses:true, pending:true, overdue:true, card:true, saving:true, chart:true, recent:true
+  }
+};
+
+function getPersonalizationV18() {
+  try {
+    return { ...DEFAULT_PERSONALIZATION_V18, ...(JSON.parse(localStorage.getItem(PERSONALIZATION_V18_KEY) || '{}')),
+      widgets: { ...DEFAULT_PERSONALIZATION_V18.widgets, ...((JSON.parse(localStorage.getItem(PERSONALIZATION_V18_KEY) || '{}')).widgets || {}) }
+    };
+  } catch (e) {
+    return { ...DEFAULT_PERSONALIZATION_V18 };
+  }
+}
+
+function savePersonalizationV18(patch) {
+  const current = getPersonalizationV18();
+  const next = { ...current, ...patch };
+  if (patch.widgets) next.widgets = { ...current.widgets, ...patch.widgets };
+  localStorage.setItem(PERSONALIZATION_V18_KEY, JSON.stringify(next));
+  applyPersonalizationV18();
+}
+
+// Override seguro do applyAppearance anterior para aceitar todos os temas.
+function applyAppearanceV11() {
+  const settings = getAppearanceV11();
+  document.body.classList.remove(...UI_STYLE_CLASSES_V18);
+  document.body.classList.add(settings.uiStyle || 'ios-glass');
+  document.documentElement.style.setProperty('--primary', settings.accent || '#007aff');
+  document.documentElement.style.setProperty('--primary-light', lightenHex(settings.accent || '#007aff', 18));
+  document.documentElement.style.setProperty('--primary-dark', darkenHex(settings.accent || '#007aff', 14));
+  syncAppearanceControlsV11();
+  syncPersonalizationControlsV18();
+}
+
+function setUIStyle(style) {
+  if (!UI_STYLE_CLASSES_V18.includes(style)) style = 'ios-glass';
+  saveAppearanceV11({ uiStyle: style });
+  applyAppearanceV11();
+  const names = { 'ios-glass':'iOS Glass', 'cyano-dark':'Cyano Dark', 'minimal-clean':'Minimal Clean', 'black-pro':'Black Pro', 'neon-flow':'Neon Flow', 'ocean-glass':'Ocean Glass', 'sunset-glass':'Sunset' };
+  showToast(`Visual ${names[style] || style} ativado!`, 'success');
+}
+
+function syncAppearanceControlsV11() {
+  const settings = getAppearanceV11();
+  const ios = document.getElementById('ui-style-ios');
+  const cyano = document.getElementById('ui-style-cyano');
+  if (ios) ios.classList.toggle('active', settings.uiStyle === 'ios-glass');
+  if (cyano) cyano.classList.toggle('active', settings.uiStyle === 'cyano-dark');
+  const picker = document.getElementById('custom-accent-color');
+  if (picker) picker.value = settings.accent || '#007aff';
+  document.querySelectorAll('[data-theme-preset]').forEach(btn => btn.classList.toggle('active', btn.dataset.themePreset === settings.uiStyle));
+}
+
+function applyPersonalizationV18() {
+  const prefs = getPersonalizationV18();
+  const alpha = Math.max(4, Math.min(85, Number(prefs.glassAlpha || 58))) / 100;
+  const blur = Math.max(8, Math.min(46, Number(prefs.glassBlur || 28)));
+  const scale = Math.max(90, Math.min(112, Number(prefs.fontScale || 100))) / 100;
+  document.documentElement.style.setProperty('--glass-alpha-v18', String(alpha));
+  document.documentElement.style.setProperty('--glass-blur-v18', `${blur}px`);
+  document.documentElement.style.setProperty('--ui-font-scale-v18', String(scale));
+
+  document.body.classList.remove(...NAV_STYLE_CLASSES_V18);
+  document.body.classList.add('nav-' + (prefs.bottomNavStyle || 'glass-pill'));
+
+  applyDashboardWidgetsV18();
+  syncPersonalizationControlsV18();
+  setupFabV18();
+}
+
+function syncPersonalizationControlsV18() {
+  const prefs = getPersonalizationV18();
+  const alpha = document.getElementById('glass-alpha-range-v18');
+  const blur = document.getElementById('glass-blur-range-v18');
+  const font = document.getElementById('font-scale-range-v18');
+  const nav = document.getElementById('bottom-nav-style-v18');
+  const fab = document.getElementById('fab-action-v18');
+  if (alpha && document.activeElement !== alpha) alpha.value = prefs.glassAlpha;
+  if (blur && document.activeElement !== blur) blur.value = prefs.glassBlur;
+  if (font && document.activeElement !== font) font.value = prefs.fontScale;
+  if (nav && document.activeElement !== nav) nav.value = prefs.bottomNavStyle;
+  if (fab && document.activeElement !== fab) fab.value = prefs.fabAction;
+  document.querySelectorAll('[data-widget-v18]').forEach(input => {
+    const key = input.dataset.widgetV18;
+    input.checked = prefs.widgets?.[key] !== false;
+  });
+  document.querySelectorAll('[data-theme-preset]').forEach(btn => btn.classList.toggle('active', btn.dataset.themePreset === getAppearanceV11().uiStyle));
+}
+
+function setGlassAlphaV18(value) { savePersonalizationV18({ glassAlpha: parseInt(value, 10) || 58 }); }
+function setGlassBlurV18(value) { savePersonalizationV18({ glassBlur: parseInt(value, 10) || 28 }); }
+function setFontScaleV18(value) { savePersonalizationV18({ fontScale: parseInt(value, 10) || 100 }); }
+function setBottomNavStyleV18(value) { savePersonalizationV18({ bottomNavStyle: value || 'glass-pill' }); showToast('Barra inferior atualizada!', 'success'); }
+function setFabActionV18(value) { savePersonalizationV18({ fabAction: value || 'quick-actions' }); showToast('Botão + atualizado!', 'success'); }
+
+function toggleDashboardWidgetV18(key, enabled) {
+  savePersonalizationV18({ widgets: { [key]: !!enabled } });
+  if (currentPage === 'dashboard') applyDashboardWidgetsV18();
+}
+
+function applyDashboardWidgetsV18() {
+  const prefs = getPersonalizationV18();
+  const map = {
+    balance: 'dash-balance', income: 'dash-income', expenses: 'dash-expenses', pending: 'dash-pending',
+    overdue: 'dash-overdue', card: 'dash-card-expenses', saving: 'dash-saving'
+  };
+  Object.entries(map).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    const card = el?.closest('.dash-card');
+    if (card) card.style.display = prefs.widgets?.[key] === false ? 'none' : '';
+  });
+  const chart = document.getElementById('dash-chart')?.closest('.section-card');
+  if (chart) chart.style.display = prefs.widgets?.chart === false ? 'none' : '';
+  const recent = document.getElementById('recent-transactions')?.closest('.section-card');
+  if (recent) recent.style.display = prefs.widgets?.recent === false ? 'none' : '';
+}
+
+function setupFabV18() {
+  const fab = document.querySelector('.fab');
+  if (!fab) return;
+  fab.onclick = handleFabV18;
+}
+
+function handleFabV18() {
+  const action = getPersonalizationV18().fabAction || 'quick-actions';
+  switch (action) {
+    case 'expense': return openNewTransaction('expense');
+    case 'income': return openNewTransaction('income');
+    case 'quick-add': return openQuickAdd();
+    case 'pending': return navigateTo('pending-review');
+    default: return openModal('quick-actions-modal');
+  }
+}
+
+function resetPersonalizationV18() {
+  localStorage.setItem(PERSONALIZATION_V18_KEY, JSON.stringify(DEFAULT_PERSONALIZATION_V18));
+  localStorage.setItem(APPEARANCE_V11_KEY, JSON.stringify(DEFAULT_APPEARANCE_V11));
+  applyAppearanceV11();
+  applyPersonalizationV18();
+  showToast('Personalização restaurada!', 'success');
+}
+
+// Wrappers para manter tudo sincronizado sem mexer na lógica principal.
+if (typeof renderSettings === 'function') {
+  const renderSettingsBeforeV18 = renderSettings;
+  renderSettings = function() {
+    renderSettingsBeforeV18();
+    syncPersonalizationControlsV18();
+  };
+}
+if (typeof renderDashboard === 'function') {
+  const renderDashboardBeforeV18 = renderDashboard;
+  renderDashboard = function() {
+    renderDashboardBeforeV18();
+    setTimeout(applyDashboardWidgetsV18, 0);
+  };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  requestAnimationFrame(() => {
+    applyAppearanceV11();
+    applyPersonalizationV18();
+  });
+});
