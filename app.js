@@ -73,7 +73,15 @@ async function checkAuth() {
     showAuth();
   }
 
-  db.auth.onAuthStateChange((_event, session) => {
+  db.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      currentUser = session?.user || null;
+      showAuth();
+      showResetPasswordTab();
+      showToast('Link validado. Cadastre sua nova senha.', 'success');
+      return;
+    }
+
     if (session) {
       currentUser = session.user;
       showApp();
@@ -105,26 +113,36 @@ async function showApp() {
 // ============================================================
 // AUTENTICAÇÃO
 // ============================================================
+function hideAuthForms() {
+  ['login-form', 'register-form', 'forgot-form', 'reset-password-form'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+}
+
 function showLoginTab() {
+  hideAuthForms();
   document.getElementById('login-form').classList.remove('hidden');
-  document.getElementById('register-form').classList.add('hidden');
-  document.getElementById('forgot-form').classList.add('hidden');
   document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-login').classList.add('active');
 }
 
 function showRegisterTab() {
-  document.getElementById('login-form').classList.add('hidden');
+  hideAuthForms();
   document.getElementById('register-form').classList.remove('hidden');
-  document.getElementById('forgot-form').classList.add('hidden');
   document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-register').classList.add('active');
 }
 
 function showForgotTab() {
-  document.getElementById('login-form').classList.add('hidden');
-  document.getElementById('register-form').classList.add('hidden');
+  hideAuthForms();
   document.getElementById('forgot-form').classList.remove('hidden');
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+}
+
+function showResetPasswordTab() {
+  hideAuthForms();
+  document.getElementById('reset-password-form').classList.remove('hidden');
   document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
 }
 
@@ -166,7 +184,7 @@ async function handleRegister(e) {
   if (error) {
     showToast(error.message, 'error');
   } else {
-    showToast('Conta criada! Verifique seu e-mail para confirmar.', 'success');
+    showToast('Conta criada! Enviamos um e-mail de confirmação. Abra o link para ativar sua conta.', 'success');
     showLoginTab();
   }
 }
@@ -176,15 +194,45 @@ async function handleForgot(e) {
   const email = document.getElementById('forgot-email').value.trim();
   setLoading('forgot-btn', true);
   const { error } = await db.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin
+    redirectTo: `${window.location.origin}${window.location.pathname}`
   });
   setLoading('forgot-btn', false);
   if (error) {
     showToast(error.message, 'error');
   } else {
-    showToast('Link de recuperação enviado para seu e-mail!', 'success');
+    showToast('Enviamos o link de recuperação. Abra o e-mail e clique em redefinir senha.', 'success');
     showLoginTab();
   }
+}
+
+async function handleResetPassword(e) {
+  e.preventDefault();
+  const password = document.getElementById('reset-password').value;
+  const confirm = document.getElementById('reset-password-confirm').value;
+
+  if (password.length < 6) {
+    showToast('A nova senha deve ter pelo menos 6 caracteres', 'error');
+    return;
+  }
+
+  if (password !== confirm) {
+    showToast('As senhas não conferem', 'error');
+    return;
+  }
+
+  setLoading('reset-password-btn', true);
+  const { error } = await db.auth.updateUser({ password });
+  setLoading('reset-password-btn', false);
+
+  if (error) {
+    showToast(error.message || 'Não foi possível alterar a senha', 'error');
+    return;
+  }
+
+  showToast('Senha alterada com sucesso! Faça login novamente.', 'success');
+  await db.auth.signOut();
+  history.replaceState(null, '', `${window.location.origin}${window.location.pathname}`);
+  showLoginTab();
 }
 
 async function handleLogout() {
