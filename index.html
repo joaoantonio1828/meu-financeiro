@@ -298,6 +298,7 @@ catch(e){}
             <button class="btn-add" style="background:linear-gradient(135deg,var(--warning),#d97706)" onclick="navigateTo('bills')">📅 Ver contas a pagar</button>
           </div>
         </div>
+        </div>
       </div>
 
       <!-- ========================
@@ -747,6 +748,42 @@ catch(e){}
           </div>
         </div>
 
+        <div class="settings-zones-nav">
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-profile')">👤<span>Perfil</span></button>
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-security')">🔐<span>Conta</span></button>
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-personalization')">🎨<span>Personalização</span></button>
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-dashboard')">📊<span>Dashboard</span></button>
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-finance')">💳<span>Financeiro</span></button>
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-imports')">📄<span>Importações</span></button>
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-backup')">💾<span>Backup</span></button>
+          <button class="settings-zone-btn" onclick="openSettingsZone('zone-device')">📱<span>App</span></button>
+        </div>
+
+        <div class="settings-overview-grid">
+          <div class="settings-overview-card" id="zone-profile">
+            <strong>👤 Perfil</strong>
+            <span>Foto, nome e avatar</span>
+          </div>
+          <div class="settings-overview-card" id="zone-dashboard">
+            <strong>📊 Dashboard</strong>
+            <span>Widgets e organização</span>
+          </div>
+          <div class="settings-overview-card" id="zone-finance">
+            <strong>💳 Financeiro</strong>
+            <span>Cartões e regras</span>
+          </div>
+          <div class="settings-overview-card" id="zone-imports">
+            <strong>📄 Importações</strong>
+            <span>PDFs e histórico</span>
+          </div>
+        </div>
+
+        <div class="settings-zone-section" id="zone-device">
+          <div class="settings-zone-header">
+            <h3>📱 App e Dispositivo</h3>
+            <p>PWA, instalação, atalhos e acesso rápido.</p>
+          </div>
+
         <div class="settings-grid">
           <div class="section-card app-store-card">
             <div class="settings-card-icon">📲</div>
@@ -762,6 +799,16 @@ catch(e){}
             <p class="settings-text">Abre uma despesa paga com data de hoje e foco direto no valor para lançar em segundos.</p>
             <button class="btn-add btn-quick full-width" onclick="openQuickAdd()">⚡ Abrir lançamento rápido</button>
           </div>
+
+        </div>
+
+        <div class="settings-zone-section" id="zone-personalization">
+          <div class="settings-zone-header">
+            <h3>🎨 Personalização</h3>
+            <p>Temas, aparência, transparência e estilo do app.</p>
+          </div>
+
+          <div class="settings-grid">
 
           <div class="section-card appearance-card-v11">
             <div class="settings-card-icon">🎨</div>
@@ -877,6 +924,16 @@ catch(e){}
             <button class="btn-add full-width" onclick="copyMonthlySummaryV17()">📋 Copiar resumo do mês</button>
           </div>
 
+        </div>
+
+        <div class="settings-zone-section" id="zone-backup">
+          <div class="settings-zone-header">
+            <h3>💾 Backup e Dados</h3>
+            <p>Importação, exportação e segurança dos seus dados.</p>
+          </div>
+
+          <div class="settings-grid">
+
           <div class="section-card">
             <div class="settings-card-icon">💾</div>
             <div class="section-title">Backup</div>
@@ -894,6 +951,16 @@ catch(e){}
             <button class="btn-secondary full-width" onclick="handleLogout()">Sair da conta</button>
           </div>
 
+
+        </div>
+
+        <div class="settings-zone-section" id="zone-security">
+          <div class="settings-zone-header">
+            <h3>🔐 Conta e Segurança</h3>
+            <p>Conta, PIN, privacidade e proteção dos dados.</p>
+          </div>
+
+          <div class="settings-grid">
 
           <div class="section-card premium-settings-card" id="security-settings-card-v5">
             <div class="settings-card-icon">🔐</div>

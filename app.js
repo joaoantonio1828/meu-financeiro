@@ -3410,3 +3410,11 @@ document.addEventListener('DOMContentLoaded', () => {
     applyPersonalizationV18();
   });
 });
+
+
+function openSettingsZone(zoneId){
+  const element = document.getElementById(zoneId);
+  if(element){
+    element.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+}

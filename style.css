@@ -2585,3 +2585,73 @@ body.hide-widget-recent #recent-transactions { display:none !important; }
 
 .auth-message-box strong { color: var(--text-1); }
 .auth-message-box.success { background: rgba(34, 197, 94, 0.10); }
+
+
+/* ===== CYANO SETTINGS ZONES ===== */
+.settings-zones-nav{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  margin:18px 0;
+}
+
+.settings-zone-btn,
+.settings-overview-card{
+  border:none;
+  border-radius:22px;
+  background:rgba(255,255,255,.08);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  padding:14px 10px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  color:var(--text-primary,#fff);
+  min-height:82px;
+  box-shadow:0 10px 30px rgba(0,0,0,.12);
+}
+
+.settings-zone-btn span,
+.settings-overview-card span{
+  font-size:.78rem;
+  opacity:.75;
+}
+
+.settings-zone-section{
+  margin:26px 0 10px;
+}
+
+.settings-zone-header{
+  margin-bottom:14px;
+  padding:0 4px;
+}
+
+.settings-zone-header h3{
+  font-size:1.05rem;
+  margin-bottom:4px;
+}
+
+.settings-zone-header p{
+  opacity:.72;
+  font-size:.88rem;
+}
+
+.settings-overview-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin-bottom:18px;
+}
+
+.settings-overview-card{
+  align-items:flex-start;
+  text-align:left;
+}
+
+@media(max-width:768px){
+  .settings-zones-nav{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
